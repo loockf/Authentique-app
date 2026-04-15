@@ -640,47 +640,103 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         return false;
       }
 
+      // --- Hide likes : direct style sur les compteurs ----------------
+      //
+      // Meme approche que Mode Focus : on maintient un Set JS des
+      // elements tagges comme "like counters" et on pose directement
+      // element.style.visibility selon la pref. Styles inline battent
+      // la specificity CSS sans discussion possible.
+      var likeCountElsSet = (typeof Set === 'function') ? new Set() : null;
+
       function scanLikeCounts() {
-        if (!prefs.hideLikeCounts) { return; }
-        // Caching par attribut. On iteres les spans feuilles uniquement
-        // (pas d'enfants), avec texte court. La regex couvre plusieurs
-        // formes : "1 074 J'aime", "14,9 k", "Aimé par X", nombre seul.
-        var spans = document.querySelectorAll('span:not([' + SCANNED_ATTR + '])');
-        for (var i = 0; i < spans.length; i++) {
-          var el = spans[i];
-          el.setAttribute(SCANNED_ATTR, '1');
-          if (el.children && el.children.length > 0) { continue; }
-          var t = (el.textContent || '').trim();
-          if (!t || t.length > 40) { continue; }
-          if (matchesLikeCountPattern(t)) {
-            el.classList.add('authentique-hide-likes');
+        if (!likeCountElsSet) { return; }
+        // Detecter les nouveaux spans like-count (pas deja dans le Set)
+        // quand la pref est ON. Si la pref est OFF, on skip la detection
+        // mais on iteres quand meme le Set existant pour retirer les
+        // styles inline.
+        if (prefs.hideLikeCounts) {
+          var spans = document.querySelectorAll('span');
+          for (var i = 0; i < spans.length; i++) {
+            var el = spans[i];
+            if (likeCountElsSet.has(el)) { continue; }
+            if (el.children && el.children.length > 0) { continue; }
+            var t = (el.textContent || '').trim();
+            if (!t || t.length > 40) { continue; }
+            if (matchesLikeCountPattern(t)) {
+              likeCountElsSet.add(el);
+            }
           }
+        }
+        // Appliquer ou retirer visibility sur les elements tagges.
+        var toRemove = [];
+        likeCountElsSet.forEach(function(el) {
+          if (!document.contains || !document.contains(el)) {
+            toRemove.push(el);
+            return;
+          }
+          if (prefs.hideLikeCounts) {
+            el.style.visibility = 'hidden';
+          } else {
+            if (el.style.visibility === 'hidden') {
+              el.style.visibility = '';
+            }
+          }
+        });
+        for (var j = 0; j < toRemove.length; j++) {
+          likeCountElsSet.delete(toRemove[j]);
         }
       }
 
-      // --- Mode Focus : tagging des boutons d'action -------------------
+      // --- Mode Focus : direct style sur les boutons d'action ---------
       //
-      // Scan les boutons dont l'aria-label commence par un mot-cle
-      // d'action (J'aime, Like, Commenter, Partager, Enregistrer, etc.)
-      // et les tagge avec .authentique-action-btn. Le CSS applique
-      // ensuite opacity: 0.25 quand body.authentique-focus-mode est
-      // actif. Regex start-of-string pour matcher "J'aime" mais pas
-      // "J'aimerais bien" ni "Commenter allez-vous".
+      // Approche radicalement differente des versions precedentes :
+      // plutot que de jouer aux classes CSS et de se battre avec la
+      // specificity d'Instagram, on manipule directement element.style.
+      // Les styles inline battent TOUJOURS les regles CSS, peu importe
+      // la specificity ou le !important cote Instagram.
+      //
+      // On maintient un Set JS des elements tagges comme "action
+      // buttons". A chaque fullScan, on re-scanne les nouveaux boutons,
+      // on met a jour le Set, puis on itere le Set et on applique ou
+      // retire le style opacity: 0.25 selon prefs.focusMode.
+      //
+      // Le Set est nettoye a la volee : si un element n'est plus dans
+      // le DOM (Instagram l'a remplace par un autre), on le retire.
       var ACTION_LABEL_REGEX = /^(j['’]aime|je n['’]aime plus|like|unlike|commenter|comment\b|partager|envoyer|share|enregistrer|ne plus enregistrer|save\b|remove|post)/i;
+      var actionButtonsSet = (typeof Set === 'function') ? new Set() : null;
 
       function scanActionButtons() {
-        var buttons = document.querySelectorAll(
-          'button:not([' + SCANNED_ATTR + ']), ' +
-          '[role="button"]:not([' + SCANNED_ATTR + '])'
-        );
+        if (!actionButtonsSet) { return; }
+        // Detecte les nouveaux boutons d'action (pas deja dans le Set).
+        var buttons = document.querySelectorAll('button, [role="button"]');
         for (var i = 0; i < buttons.length; i++) {
           var btn = buttons[i];
-          btn.setAttribute(SCANNED_ATTR, '1');
+          if (actionButtonsSet.has(btn)) { continue; }
           var label = btn.getAttribute && btn.getAttribute('aria-label');
           if (!label) { continue; }
           if (ACTION_LABEL_REGEX.test(label.trim())) {
-            btn.classList.add('authentique-action-btn');
+            actionButtonsSet.add(btn);
           }
+        }
+        // Applique ou retire l'opacity selon la pref, et nettoie les
+        // elements qui ne sont plus dans le DOM.
+        var toRemove = [];
+        actionButtonsSet.forEach(function(el) {
+          if (!document.contains || !document.contains(el)) {
+            toRemove.push(el);
+            return;
+          }
+          if (prefs.focusMode) {
+            el.style.opacity = '0.25';
+          } else {
+            // Remettre l'opacity d'origine (= enlever l'inline style)
+            if (el.style.opacity === '0.25') {
+              el.style.opacity = '';
+            }
+          }
+        });
+        for (var j = 0; j < toRemove.length; j++) {
+          actionButtonsSet.delete(toRemove[j]);
         }
       }
 
@@ -1130,20 +1186,39 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // dependance fragile sur des labels Instagram qui changent
       // regulierement ("Abonnements" -> "Suivi(e)" en 2024).
 
+      // Wrapper defensif : execute un scanner dans un try-catch et
+      // report l'erreur via postMessage si ca explose. Comme ca une
+      // exception dans un scanner n'interrompt plus tout le pipeline,
+      // et on a une trace remontee a Metro pour debug.
+      function runSafely(name, fn) {
+        try {
+          fn();
+        } catch (err) {
+          try {
+            post({
+              type: 'scanner-error',
+              scanner: name,
+              message: (err && err.message) ? err.message : String(err),
+              stack: (err && err.stack) ? String(err.stack).slice(0, 500) : ''
+            });
+          } catch (e2) {}
+        }
+      }
+
       function fullScan() {
         if (!document.body) { return; }
-        updateRouteMarker();
-        scanSponsored();
-        scanSuggestions();
-        scanReels();
-        scanLikeCounts();
-        scanActionButtons();
-        scanReelsFullscreen();
-        scanExplore();
-        scanDirectSuggestions();
-        scanReelOverlaySuggestions();
-        scanSponsoredStories();
-        closeOpenInAppBanners();
+        runSafely('updateRouteMarker', updateRouteMarker);
+        runSafely('scanSponsored', scanSponsored);
+        runSafely('scanSuggestions', scanSuggestions);
+        runSafely('scanReels', scanReels);
+        runSafely('scanLikeCounts', scanLikeCounts);
+        runSafely('scanActionButtons', scanActionButtons);
+        runSafely('scanReelsFullscreen', scanReelsFullscreen);
+        runSafely('scanExplore', scanExplore);
+        runSafely('scanDirectSuggestions', scanDirectSuggestions);
+        runSafely('scanReelOverlaySuggestions', scanReelOverlaySuggestions);
+        runSafely('scanSponsoredStories', scanSponsoredStories);
+        runSafely('closeOpenInAppBanners', closeOpenInAppBanners);
       }
 
       // --- Scanner stories sponsorisees --------------------------------
@@ -1506,13 +1581,17 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       var tabSwipeStartY = 0;
       var tabSwipeStartTime = 0;
       function installTabSwipeNav() {
+        // capture: true pour que nos handlers tirent AVANT ceux
+        // d'Instagram (qui pourraient installer leurs propres listeners
+        // bubble-phase et stopper la propagation). En capture phase,
+        // on est garantis de recevoir l'event en premier.
         document.addEventListener('touchstart', function(e) {
           if (e.touches && e.touches.length === 1) {
             tabSwipeStartX = e.touches[0].clientX;
             tabSwipeStartY = e.touches[0].clientY;
             tabSwipeStartTime = Date.now();
           }
-        }, { passive: true });
+        }, { passive: true, capture: true });
 
         document.addEventListener('touchend', function(e) {
           if (!e.changedTouches || e.changedTouches.length !== 1) { return; }
@@ -1520,20 +1599,17 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           var dx = e.changedTouches[0].clientX - tabSwipeStartX;
           var dy = e.changedTouches[0].clientY - tabSwipeStartY;
           var elapsed = Date.now() - tabSwipeStartTime;
-          if (Math.abs(dx) < 80) { return; }
-          if (Math.abs(dx) < Math.abs(dy) * 2) { return; }
-          if (elapsed > 500) { return; }
+          // Seuils relaxes : 60px au lieu de 80px, 800ms au lieu de 500ms
+          if (Math.abs(dx) < 60) { return; }
+          if (Math.abs(dx) < Math.abs(dy) * 1.5) { return; }
+          if (elapsed > 800) { return; }
 
           var currentIndex = getCurrentTabRouteIndex();
           if (currentIndex < 0) { return; }
-          // Convention utilisateur inversee par rapport a iOS natif :
-          //   swipe gauche  (dx < 0) -> onglet precedent (index - 1)
-          //   swipe droite  (dx > 0) -> onglet suivant  (index + 1)
-          // C'est ce que l'utilisateur attend intuitivement pour passer
-          // de DM vers profil en swipant vers la droite.
+          // Convention utilisateur : swipe droite (dx > 0) = onglet suivant
           var nextIndex = dx > 0 ? currentIndex + 1 : currentIndex - 1;
           navigateToTabByIndex(nextIndex);
-        }, { passive: true });
+        }, { passive: true, capture: true });
       }
 
       function start() {

@@ -34,7 +34,8 @@ export const defaultPreferences: FilterPreferences = {
 /** Messages remontés du WebView vers React Native. */
 export type FilterMessage =
   | { type: 'hidden-count'; count: number }
-  | { type: 'ready'; platform: 'instagram' | 'facebook' };
+  | { type: 'ready'; platform: 'instagram' | 'facebook' }
+  | { type: 'scanner-error'; scanner: string; message: string; stack: string };
 
 /** Bundle CSS + JS produit pour une plateforme donnée. */
 export type FilterBundle = {

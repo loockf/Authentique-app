@@ -77,6 +77,18 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         const message = JSON.parse(raw) as FilterMessage;
         if (message.type === 'hidden-count') {
           bumpHiddenCount(message.count);
+        } else if (message.type === 'scanner-error') {
+          // Erreur JS dans un scanner injecte : on la console-log
+          // pour qu'elle apparaisse dans Metro. Permet de debugger
+          // quand un scanner crash silencieusement et casse tout
+          // le pipeline.
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[Authentique filter error]',
+            message.scanner,
+            message.message,
+            message.stack,
+          );
         }
         // Les messages 'ready' sont ignorés côté RN pour l'instant.
       } catch {
@@ -135,7 +147,12 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         // temps, les deux rentrent en conflit et aucun des deux ne marche
         // correctement.
         allowsBackForwardNavigationGestures={false}
-        pullToRefreshEnabled={true}
+        // pullToRefreshEnabled: false pour empecher le scroll vers le
+        // haut de declencher un rechargement de la page Instagram. Sans
+        // ca, chaque pull-to-refresh recharge la page, ouvre une breve
+        // fenetre de visibilite non-filtree (nos scanners prennent ~500ms
+        // a se remettre en marche), et le contenu suggere reapparait.
+        pullToRefreshEnabled={false}
         // Masque la barre iOS ⬆️⬇️✅ qui apparait au-dessus du clavier
         // quand un input HTML est focus. Elle est utile pour naviguer
         // entre les inputs d'un formulaire classique, mais totalement
