@@ -219,27 +219,90 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     }
 
     /* -----------------------------------------------------------------
-       Lock vertical swipe sur un Reel individuel
+       Lock vertical swipe sur un Reel individuel OU modal DM
        -----------------------------------------------------------------
-       Quand un Reel est ouvert depuis la messagerie ou depuis un lien
-       partage, Instagram le sert sur /reel/<id>/ (URL singulier, sans
-       le "s"), et un swipe vertical fait basculer dans le fil
-       algorithmique /reels/ juste apres. C'est exactement ce qu'on
-       veut eviter : l'utilisateur doit pouvoir regarder le Reel
-       partage et le fermer, pas tomber dans l'algo.
+       Deux cas ciblent ce lock :
 
-       La classe body.authentique-reel-locked est posee par le JS du
-       commit 3 sur le pathname /reel/:id uniquement. Elle bloque
-       l'overflow vertical du body et du <main>, ce qui tue le scroll
-       qu'Instagram utilise pour sa snap-pagination entre Reels
-       successifs. Les taps (play/pause, like) et les gestes
-       horizontaux (swipe-right pour revenir) restent actifs.
+       1. /reel/<id>/ — page singleton d'un Reel ouvert depuis un lien
+          partage. C'est detecte par pathname.
+       2. /direct/... avec un Reel-modal ouvert — Instagram garde la
+          route DM mais affiche le Reel en overlay fullscreen par-dessus
+          la conversation. Detecte par la presence d'une <video>
+          couvrant la majorite du viewport + route /direct/.
+
+       Dans les deux cas, l'utilisateur doit pouvoir regarder le Reel
+       et le fermer, pas glisser dans le fil algorithmique qui suit.
+
+       Le lock combine deux mecanismes :
+         - overflow: hidden pour tuer le scroll container qui anime
+           la snap-pagination Instagram entre Reels successifs.
+         - touch-action: pan-x pour empecher Safari iOS d'interpreter
+           un swipe vertical, meme si Instagram ecoute touchmove
+           manuellement par-dessus.
+       Les taps (play/pause, like) et les gestes horizontaux restent
+       actifs parce qu'on n'a bloque QUE le panning vertical.
        ----------------------------------------------------------------- */
     body.authentique-reel-locked,
     body.authentique-reel-locked main,
     body.authentique-reel-locked [role="main"] {
       overflow: hidden !important;
       overscroll-behavior: none !important;
+      touch-action: pan-x !important;
+    }
+
+    /* -----------------------------------------------------------------
+       Etat vide de la page Explore (loupe) en mode idle
+       -----------------------------------------------------------------
+       Quand l'utilisateur ouvre la loupe sans recherche active, on
+       masque toute la grille "decouvrir" via JS. Instagram detecte le
+       vide et tente de re-fetcher en boucle, affichant un spinner qui
+       tourne pour rien. On masque donc aussi ses spinners ET on
+       injecte un petit message calme a la place, en clin d'oeil a la
+       philosophie d'Authentique.
+
+       La classe authentique-on-explore-idle est posee par le JS quand
+       isExploreRoute() && !isExploreSearchActive(). Elle agit a la
+       fois pour masquer le spinner natif et pour reveler le message.
+       ----------------------------------------------------------------- */
+    body.authentique-on-explore-idle [role="progressbar"],
+    body.authentique-on-explore-idle [aria-label*="Chargement" i],
+    body.authentique-on-explore-idle [aria-label*="Loading" i],
+    body.authentique-on-explore-idle [data-visualcompletion="loading-state"],
+    body.authentique-on-explore-idle svg[aria-label*="Chargement" i],
+    body.authentique-on-explore-idle svg[aria-label*="Loading" i] {
+      display: none !important;
+    }
+
+    .authentique-explore-empty {
+      display: none;
+      position: fixed;
+      left: 50%;
+      top: 45%;
+      transform: translate(-50%, -50%);
+      max-width: 320px;
+      padding: 0 24px;
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .authentique-explore-empty .authentique-explore-empty-title {
+      display: block;
+      font-size: 18px;
+      font-weight: 600;
+      color: #1c1c1a;
+      margin-bottom: 8px;
+      letter-spacing: -0.2px;
+    }
+    .authentique-explore-empty .authentique-explore-empty-body {
+      display: block;
+      font-size: 13px;
+      font-weight: 400;
+      color: #6b6a65;
+      line-height: 1.5;
+    }
+    body.authentique-on-explore-idle .authentique-explore-empty {
+      display: block;
     }
   `;
 
@@ -508,41 +571,84 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function updateRouteMarker() {
         if (!document.body) { return; }
+
         // L'overlay "En attente d'un Reel de tes amis..." n'est pertinent
-        // que sur le fil /reels/ (plural). Sur /reel/:id on laisse l'UI
-        // normale et on se contente de lock le swipe vertical.
-        document.body.classList.toggle('authentique-on-reels', isReelsFeedRoute());
-        // Le lock du swipe vertical est applique UNIQUEMENT sur la route
-        // Reel individuel pour ne pas casser le fil algorithmique de
-        // /reels/ qui reste swipable par choix de l'utilisateur.
-        document.body.classList.toggle('authentique-reel-locked', isIndividualReelRoute());
+        // que sur le fil /reels/ (plural) ET quand aucun Reel n'est
+        // effectivement visible a l'ecran. On le faisait auparavant en
+        // se basant uniquement sur la route, ce qui affichait l'overlay
+        // par-dessus des Reels d'amis valides. Version 2 : check
+        // dynamique sur la presence d'une <video> visible.
+        var showReelsOverlay = isReelsFeedRoute() && !hasVisibleReelInPage();
+        document.body.classList.toggle('authentique-on-reels', showReelsOverlay);
+
+        // Le lock du swipe vertical s'applique dans deux cas :
+        //  1. /reel/<id>/ — Reel ouvert via URL singleton (lien partage)
+        //  2. /direct/... + un Reel-modal visible dans l'overlay
+        // Dans les deux cas on tue la snap-pagination pour empecher
+        // l'utilisateur de glisser dans le fil algorithmique Reels.
+        var shouldLock = isIndividualReelRoute() || isDMReelOverlayOpen();
+        document.body.classList.toggle('authentique-reel-locked', shouldLock);
+
+        // Etat vide de la loupe Instagram : pose uniquement quand on
+        // est sur /explore/ sans recherche active. La classe est lue
+        // par le CSS pour masquer les spinners et reveler le message.
+        var showExploreEmpty = isExploreRoute() && !isExploreSearchActive();
+        document.body.classList.toggle('authentique-on-explore-idle', showExploreEmpty);
       }
 
       // --- Reels card detection (filtre contextuel "Suivre") -------------
       //
-      // Version stricte : on ne cherche plus un bouton "Suivre" dans tout
-      // le document et on ne remonte plus vers un ancetre "gros". On
-      // commence par lister les cards via selecteurs strictes, puis on
-      // verifie, dans le sous-arbre de chaque card, si elle contient un
-      // vrai bouton (tagName BUTTON ou role="button") avec textContent
-      // strictement egal a "Suivre"/"Follow". C'est le fail-safe critique :
-      // si Instagram change de structure, on trouve zero card et on ne
-      // masque rien au lieu de tout masquer (comportement precedent).
-      function findReelCards() {
-        // Selecteurs stricts, dans l'ordre de preference.
-        var strict = document.querySelectorAll(
-          'main article:not(.authentique-hidden), ' +
-          '[role="main"] article:not(.authentique-hidden), ' +
-          'main [role="article"]:not(.authentique-hidden), ' +
-          '[role="main"] [role="article"]:not(.authentique-hidden)'
-        );
-        if (strict.length > 0) { return strict; }
-        // Fallback tres conservateur : on accepte tous les <article>
-        // visibles dans le body, sans jamais remonter vers un div
-        // generique parent. Si pas d'article du tout, on rend null
-        // et scanReelsFullscreen ne hide rien.
-        var fallback = document.querySelectorAll('article:not(.authentique-hidden), [role="article"]:not(.authentique-hidden)');
-        return fallback;
+      // Nouvelle heuristique, version 2 : on passe par les elements
+      // <video> de la page. Instagram Reels mobile web n'utilise PAS de
+      // balise <article>, donc toute detection basee sur article/role
+      // tombait sur zero resultat en production et le filtre etait
+      // invisible. A la place :
+      //
+      //   1. Pour chaque <video> presente dans le DOM,
+      //   2. On remonte l'arbre des ancetres jusqu'a trouver le plus
+      //      petit conteneur qui contient exactement une <video> ET
+      //      qui ressemble a une reel card (hauteur substantielle).
+      //   3. Si cette card expose un vrai bouton <button>/role=button
+      //      avec textContent === "Suivre"/"Follow", on la masque
+      //      (display: none pour que le swipe avance au Reel suivant).
+      //
+      // Fail-safe : si on trouve aucune <video>, on ne masque rien.
+      // Si on trouve une card mais pas de bouton Suivre dedans, c'est
+      // soit un ami soit un compte qu'Instagram ne nous propose pas
+      // comme nouveau follow -> on la laisse visible. Meilleur a se
+      // tromper en faveur de l'affichage qu'en faveur du masquage.
+      function findReelCardFromVideo(video) {
+        if (!video) { return null; }
+        var el = video.parentElement;
+        while (el && el !== document.body) {
+          // On refuse de remonter au-dessus de main / role=main pour ne
+          // jamais capturer le conteneur racine du feed.
+          if (el.tagName === 'MAIN') { return null; }
+          if (el.getAttribute && el.getAttribute('role') === 'main') { return null; }
+
+          // La card doit contenir exactement 1 video (celle de depart).
+          // Si elle en contient 2+, c'est qu'on est deja trop haut dans
+          // l'arbre (plusieurs reels consecutifs) et on s'arrete au
+          // niveau precedent.
+          var videoCount = 0;
+          if (el.querySelectorAll) {
+            videoCount = el.querySelectorAll('video').length;
+          }
+          if (videoCount > 1) {
+            return el.parentElement === video.parentElement ? null :
+                   (el.firstElementChild || null);
+          }
+
+          // La card doit avoir une hauteur raisonnable (> 40% du
+          // viewport) pour ne pas etre confondue avec une miniature.
+          var minHeight = Math.max(200, window.innerHeight * 0.4);
+          if (el.offsetHeight >= minHeight) {
+            return el;
+          }
+
+          el = el.parentElement;
+        }
+        return null;
       }
 
       function cardHasFollowButton(card) {
@@ -567,13 +673,70 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         return false;
       }
 
+      /**
+       * Est-ce qu'il y a au moins un Reel visible a l'ecran ?
+       * Parcourt toutes les <video>, pour chacune verifie qu'aucun
+       * ancetre n'est marque .authentique-hidden / .authentique-hidden-flow
+       * et que la video a une taille substantielle. Utilise par
+       * updateRouteMarker pour decider si on affiche l'overlay
+       * "En attente d'un Reel de tes amis...".
+       */
+      function hasVisibleReelInPage() {
+        var videos = document.querySelectorAll('video');
+        for (var i = 0; i < videos.length; i++) {
+          var v = videos[i];
+          if (v.offsetHeight < 200) { continue; }
+          var hidden = false;
+          var el = v;
+          while (el && el !== document.body) {
+            if (el.classList && (
+                el.classList.contains('authentique-hidden') ||
+                el.classList.contains('authentique-hidden-flow'))) {
+              hidden = true;
+              break;
+            }
+            el = el.parentElement;
+          }
+          if (!hidden) { return true; }
+        }
+        return false;
+      }
+
+      /**
+       * Est-ce qu'un Reel-modal est actuellement ouvert dans la
+       * messagerie ? Instagram n'ouvre PAS un Reel partage en DM via
+       * /reel/<id>/ ; il garde la route /direct/... et affiche le Reel
+       * dans un overlay fullscreen. On detecte cet etat par la
+       * presence d'une <video> qui couvre la majorite du viewport
+       * combinee a la route /direct/.
+       */
+      function isDMReelOverlayOpen() {
+        if (!isDirectRoute()) { return false; }
+        var videos = document.querySelectorAll('video');
+        for (var i = 0; i < videos.length; i++) {
+          var rect = videos[i].getBoundingClientRect ? videos[i].getBoundingClientRect() : null;
+          if (!rect) { continue; }
+          if (rect.width >= window.innerWidth * 0.5 && rect.height >= window.innerHeight * 0.4) {
+            return true;
+          }
+        }
+        return false;
+      }
+
       function scanReelsFullscreen() {
         // Seulement sur le fil /reels/ (algorithmique), pas sur /reel/:id
         // (un Reel individuel qu'on traite via le lock swipe vertical).
         if (!isReelsFeedRoute()) { return; }
-        var cards = findReelCards();
-        for (var i = 0; i < cards.length; i++) {
-          var card = cards[i];
+        var videos = document.querySelectorAll('video');
+        for (var i = 0; i < videos.length; i++) {
+          var v = videos[i];
+          // Eviter les miniatures (cards deja scrollees hors-viewport ou
+          // previews de bandes sonores) : on n'adresse que les videos
+          // substantielles.
+          if (v.offsetHeight < 200) { continue; }
+          var card = findReelCardFromVideo(v);
+          if (!card) { continue; }
+          if (card.classList.contains('authentique-hidden')) { continue; }
           if (cardHasFollowButton(card)) {
             // Pour les Reels on veut que le swipe avance au suivant, donc
             // on utilise hide() (display:none) et pas hideInFlow().
@@ -636,11 +799,19 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       // --- Filtre messagerie ---------------------------------------------
-      // Dans l'inbox Instagram, on masque les blocs de canaux suggeres
-      // et de contenu suggere, qui polluent l'espace entre les vrais
-      // threads de messages. On utilise du matching textuel sur les
-      // en-tetes typiques.
+      // Dans la messagerie Instagram, on masque les blocs de canaux
+      // suggeres et de contenu suggere, qui polluent l'inbox mais aussi
+      // les Reel-modals (quand un ami partage un Reel en DM, Instagram
+      // lazy-load des Reels algorithmiques supplementaires sous la
+      // vignette sous un header "Suggestions").
+      //
+      // On a ajoute "Suggestions" seul a la liste parce que c'est
+      // exactement le header qu'Instagram utilise dans ce cas. Risque
+      // de false positive faible parce qu'on ne matche que sur route
+      // /direct/..., ou "Suggestions" en tant que tel n'a aucune place
+      // legitime.
       var DM_SUGGESTED_NEEDLES = [
+        'Suggestions',
         'Canaux suggérés',
         'Suggested channels',
         'Canaux',
@@ -649,6 +820,8 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         'Suggested content',
         'Suggestions de messages',
         'Messages suggérés',
+        'Suggestions pour vous',
+        'Suggested for you',
       ];
 
       function scanDirectSuggestions() {
@@ -657,24 +830,32 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         var headings = document.querySelectorAll('h2, h3, h4, span');
         for (var i = 0; i < headings.length; i++) {
           var h = headings[i];
+          // On ne prend que les noeuds dont TOUT le textContent correspond
+          // exactement a une needle (pas de match partiel dans un gros
+          // paragraphe), et seulement s'ils n'ont pas trop d'enfants.
+          if (h.children && h.children.length > 1) { continue; }
           var t = (h.textContent || '').trim();
-          if (!t || t.length > 60) { continue; }
+          if (!t || t.length > 40) { continue; }
           var matched = false;
           for (var j = 0; j < DM_SUGGESTED_NEEDLES.length; j++) {
             if (t === DM_SUGGESTED_NEEDLES[j]) { matched = true; break; }
           }
           if (matched) {
-            // On remonte jusqu'a un conteneur de section : grand-parent
-            // ou arriere-grand-parent du heading. Pas de fallback vers
-            // main pour eviter de tout masquer.
+            // Walk-up plus agressif : on remonte jusqu'a un conteneur
+            // substantiel (hauteur > 150px) ou jusqu'a 6 parents, sans
+            // jamais toucher a main / document.body.
             var container = h.parentElement;
-            if (container && container.parentElement) { container = container.parentElement; }
-            if (container && container.parentElement) { container = container.parentElement; }
+            var mainEl = document.querySelector('main') || document.querySelector('[role="main"]');
+            var depth = 0;
+            while (container && container !== document.body && depth < 6) {
+              if (container === mainEl) { container = null; break; }
+              if (mainEl && container.contains(mainEl)) { container = null; break; }
+              if (container.offsetHeight >= 150) { break; }
+              container = container.parentElement;
+              depth++;
+            }
             if (container && container !== document.body) {
-              var main = document.querySelector('main');
-              if (container !== main && !container.contains(main || document.body)) {
-                hide(container, 'dm-suggestion');
-              }
+              hide(container, 'dm-suggestion');
             }
           }
         }
@@ -708,6 +889,18 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        * autre route, on reset le compteur pour pouvoir re-tenter quand
        * l'utilisateur revient sur le fil.
        */
+      // Labels du feed cible selon la localisation et les variantes
+      // FR d'inclusivite utilisees par Instagram. "Suivi(e)" avec le
+      // "(e)" entre parentheses est le label actuel de la home en FR ;
+      // "Abonnements" est un ancien label qu'on garde comme fallback.
+      var FOLLOWING_TARGET_NEEDLES = [
+        'Suivi(e)',
+        'Suivi',
+        'Suivis',
+        'Abonnements',
+        'Following',
+      ];
+
       var enforceAttempts = 0;
       var enforceLastAttempt = 0;
       var enforceLastRoute = '';
@@ -729,30 +922,49 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         for (var i = 0; i < allSpans.length; i++) {
           var el = allSpans[i];
           var t = (el.textContent || '').trim();
-          if (t === 'Pour vous' || t === 'For you' || t === 'Suggestions') {
-            enforceAttempts++;
-            enforceLastAttempt = now;
-            var clickable = el.closest('[role="button"]') || el.parentElement;
-            if (!clickable) { return; }
-            try {
-              clickable.click();
-              setTimeout(function() {
-                var options = document.querySelectorAll('[role="menuitem"] span, [role="option"] span, div[role="dialog"] span');
-                for (var j = 0; j < options.length; j++) {
-                  var ot = (options[j].textContent || '').trim();
-                  if (ot === 'Abonnements' || ot === 'Following') {
+          if (t !== 'Pour vous' && t !== 'For you' && t !== 'Suggestions') { continue; }
+
+          enforceAttempts++;
+          enforceLastAttempt = now;
+          var clickable = el.closest('[role="button"]') || el.parentElement;
+          if (!clickable) { return; }
+
+          try {
+            clickable.click();
+            setTimeout(function() {
+              var options = document.querySelectorAll('[role="menuitem"] span, [role="option"] span, div[role="dialog"] span');
+              var matched = false;
+              for (var j = 0; j < options.length; j++) {
+                var ot = (options[j].textContent || '').trim();
+                for (var k = 0; k < FOLLOWING_TARGET_NEEDLES.length; k++) {
+                  if (ot === FOLLOWING_TARGET_NEEDLES[k]) {
                     var target = options[j].closest('[role="menuitem"]') ||
                                  options[j].closest('[role="option"]') ||
                                  options[j].closest('[role="button"]') ||
                                  options[j];
-                    if (target) { target.click(); }
+                    if (target) { target.click(); matched = true; }
                     break;
                   }
                 }
-              }, 400);
-            } catch (e) {}
-            return;
-          }
+                if (matched) { break; }
+              }
+              // Si on n'a rien clique, on ferme le dropdown pour ne pas
+              // le laisser ouvert par-dessus l'UI. Deux tentatives :
+              // d'abord un Escape key event (ferme les menus ARIA),
+              // puis un clic sur body comme filet de securite.
+              if (!matched) {
+                try {
+                  var esc = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true });
+                  document.dispatchEvent(esc);
+                } catch (e) {}
+                try {
+                  var bodyClick = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+                  (document.body || document.documentElement).dispatchEvent(bodyClick);
+                } catch (e) {}
+              }
+            }, 400);
+          } catch (e) {}
+          return;
         }
       }
 
@@ -786,6 +998,35 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         (document.body || document.documentElement).appendChild(overlay);
       }
 
+      /**
+       * Injecte le message "etat vide" de la loupe Instagram. Meme
+       * principe que l'overlay Reels : un div injecte une seule fois
+       * dans body, cache par defaut, rendu visible par la classe
+       * body.authentique-on-explore-idle posee par updateRouteMarker.
+       *
+       * Le texte est volontairement calme et un peu poetique : clin
+       * d'oeil a la philosophie d'Authentique qui prefere le vide au
+       * contenu impose par l'algo.
+       */
+      function injectExploreEmptyState() {
+        if (document.getElementById('authentique-explore-empty')) { return; }
+        var wrapper = document.createElement('div');
+        wrapper.id = 'authentique-explore-empty';
+        wrapper.className = 'authentique-explore-empty';
+
+        var title = document.createElement('span');
+        title.className = 'authentique-explore-empty-title';
+        title.textContent = 'Rien à voir.';
+
+        var body = document.createElement('span');
+        body.className = 'authentique-explore-empty-body';
+        body.textContent = "Et c'est exactement ce qu'on voulait. Tape ce que tu cherches dans la barre ci-dessus.";
+
+        wrapper.appendChild(title);
+        wrapper.appendChild(body);
+        (document.body || document.documentElement).appendChild(wrapper);
+      }
+
       // --- Hot reload des préférences --------------------------------------
 
       window.__authentiqueUpdatePrefs = function(newPrefs) {
@@ -799,6 +1040,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function start() {
         injectReelsWaitingOverlay();
+        injectExploreEmptyState();
         // Premier full scan : appelle aussi enforceFollowingFeed() et
         // tous les scanners (sponsored, suggestions, explore, DM, etc.).
         fullScan();
