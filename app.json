@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Authentique",
+    "slug": "authentique",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#fafaf7"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.authentique.iOS"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
