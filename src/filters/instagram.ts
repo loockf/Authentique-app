@@ -124,21 +124,42 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       display: none !important;
     }
 
-    ${prefs.hideLikeCounts
-      ? `
-    /* Compteurs de likes — on masque via classe appliquée par notre script */
-    .authentique-hide-likes { visibility: hidden !important; }
-    `
-      : ''}
+    /* -----------------------------------------------------------------
+       Masquage des compteurs de likes
+       -----------------------------------------------------------------
+       Les regles sont TOUJOURS presentes dans le bundle. C'est le body
+       class .authentique-hide-likes-enabled qui decide si elles
+       s'appliquent. Le JS toggle cette classe a chaque updateRouteMarker
+       en fonction de prefs.hideLikeCounts, ce qui rend le toggle
+       instantane meme apres un changement de preference (pas besoin
+       de re-injecter de CSS).
 
-    ${prefs.focusMode
-      ? `
-    /* Mode Focus : on atténue les icônes d'action */
-    section[role="group"] > div > div > svg {
+       Les selecteurs couvrent plusieurs layouts d'Instagram :
+         - home feed : link <a href*="liked_by">
+         - home feed moderne : span dans button[aria-label*="aime"]
+         - reels fullscreen : span sous le bouton heart
+    */
+    body.authentique-hide-likes-enabled a[href*="liked_by"],
+    body.authentique-hide-likes-enabled button[aria-label*="aime" i] span,
+    body.authentique-hide-likes-enabled button[aria-label*="Like" i] span,
+    body.authentique-hide-likes-enabled [role="button"][aria-label*="aime" i] span,
+    body.authentique-hide-likes-enabled [role="button"][aria-label*="Like" i] span,
+    body.authentique-hide-likes-enabled .authentique-hide-likes {
+      visibility: hidden !important;
+    }
+
+    /* -----------------------------------------------------------------
+       Mode Focus
+       -----------------------------------------------------------------
+       Meme principe : regle toujours presente, activee via la body
+       class .authentique-focus-mode posee par le JS. On attenue les
+       icones d'action (like, comment, share, save) pour qu'elles
+       s'effacent visuellement, tout en restant cliquables.
+    */
+    body.authentique-focus-mode section[role="group"] svg,
+    body.authentique-focus-mode section[role="group"] button {
       opacity: 0.25 !important;
     }
-    `
-      : ''}
 
     /* -----------------------------------------------------------------
        Classes universelles de masquage
@@ -259,24 +280,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       touch-action: pan-x !important;
     }
 
-    /* Masquage des boutons d'action qui debordent a droite d'un Reel
-       ouvert en DM ou en /reel/:id. L'idee est simple : on ne consomme
-       que ce que l'ami a envoye, pas plus. Les icones like / commenter
-       / partager / enregistrer ne servent qu'a entretenir l'algo.
-       La zone de reponse en bas (chat input de la DM) reste visible
-       parce qu'elle est hors du scope du reel-card. */
-    body.authentique-reel-locked [aria-label*="aime" i],
-    body.authentique-reel-locked [aria-label*="Like" i],
-    body.authentique-reel-locked [aria-label*="Commenter" i],
-    body.authentique-reel-locked [aria-label*="Comment" i],
-    body.authentique-reel-locked [aria-label*="Partager" i],
-    body.authentique-reel-locked [aria-label*="Share" i],
-    body.authentique-reel-locked [aria-label*="Enregistrer" i],
-    body.authentique-reel-locked [aria-label*="Save" i],
-    body.authentique-reel-locked [aria-label*="Suivre" i],
-    body.authentique-reel-locked [aria-label*="Follow" i] {
-      display: none !important;
-    }
+    /* Note : on ne masque PLUS les boutons d'action (like, comment,
+       partager, save) dans le scope reel-locked. L'utilisateur nous
+       a rappele que ca rentre mieux dans la philosophie "fenetre
+       filtree, pas experience censuree" : reagir a un Reel qu'un ami
+       a partage reste un geste social legitime. Seul le SCROLL
+       VERTICAL reste bloque pour empecher de tomber dans l'algo. */
 
     /* Flash-silent : masque le dropdown de selection de feed pendant
        la petite fenetre ou notre JS l'ouvre pour basculer sur
@@ -525,14 +534,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       function scanLikeCounts() {
-        if (!prefs.hideLikeCounts) { return; }
-        var likeLinks = document.querySelectorAll('a[href$="/liked_by/"], a[href*="/liked_by/"] span');
-        for (var l = 0; l < likeLinks.length; l++) {
-          var btn = likeLinks[l];
-          if (!btn.classList.contains('authentique-hide-likes')) {
-            btn.classList.add('authentique-hide-likes');
-          }
-        }
+        // Le masquage des compteurs de likes est desormais entierement
+        // assure par les regles CSS sous body.authentique-hide-likes-enabled,
+        // posee dans updateRouteMarker() a chaque fullScan en fonction
+        // de prefs.hideLikeCounts. Plus besoin de scanner et tagger les
+        // elements un par un. Cette fonction reste en place pour faire
+        // un no-op propre — on evite de toucher fullScan() et de risquer
+        // de casser le pipeline.
       }
 
       /**
@@ -638,6 +646,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // par le CSS pour masquer les spinners et reveler le message.
         var showExploreEmpty = isExploreRoute() && !isExploreSearchActive();
         document.body.classList.toggle('authentique-on-explore-idle', showExploreEmpty);
+
+        // Preferences utilisateur pilotees par des body classes. Les
+        // regles CSS correspondantes sont toujours presentes dans le
+        // bundle, ce qui rend le toggle instantane (hot reload sans
+        // re-injection de style).
+        document.body.classList.toggle('authentique-hide-likes-enabled', !!prefs.hideLikeCounts);
+        document.body.classList.toggle('authentique-focus-mode', !!prefs.focusMode);
       }
 
       // --- Reels card detection (filtre contextuel "Suivre") -------------
@@ -709,14 +724,21 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        *    pas d'attribut hidden. Ca elimine les templates caches par
        *    Instagram qui contiennent le mot "Suivre" mais ne sont pas
        *    affiches.
-       *  - Le bouton doit etre dans la MOITIE SUPERIEURE de la card.
-       *    Instagram place le vrai Follow button a cote du username,
-       *    donc en haut. Les widgets de suggestions qui s'incrustent
-       *    parfois en bas d'une card sont ainsi ignores.
+       *
+       * Note historique : un commit precedent ajoutait une borne
+       * positionnelle "le bouton doit etre dans la moitie superieure de
+       * la card" en partant du principe que le Follow button est toujours
+       * colle au username, qui est en haut. C'est FAUX sur Instagram
+       * Reels web mobile : le username (et donc le Follow button) flotte
+       * en BAS-GAUCHE du video, pas en haut. La borne rejetait donc les
+       * seuls matches legitimes et aucun Reel non-ami n'etait masque.
+       * On s'appuie desormais uniquement sur la visibilite et le match
+       * textuel strict. findReelCardFromVideo garde la contrainte de
+       * "exactement 1 video par card", ce qui suffit a isoler le bouton
+       * au reel courant.
        */
       function cardHasFollowButton(card) {
         if (!card) { return false; }
-        var cardRect = card.getBoundingClientRect ? card.getBoundingClientRect() : null;
         var buttons = card.querySelectorAll('button, [role="button"]');
         for (var i = 0; i < buttons.length; i++) {
           var btn = buttons[i];
@@ -725,22 +747,10 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
           var t = (btn.textContent || '').trim();
           var label = btn.getAttribute && btn.getAttribute('aria-label');
-          var matches = false;
           for (var j = 0; j < FOLLOW_NEEDLES.length; j++) {
-            if (t === FOLLOW_NEEDLES[j]) { matches = true; break; }
-            if (label && label === FOLLOW_NEEDLES[j]) { matches = true; break; }
+            if (t === FOLLOW_NEEDLES[j]) { return true; }
+            if (label && label === FOLLOW_NEEDLES[j]) { return true; }
           }
-          if (!matches) { continue; }
-
-          // Check position : uniquement dans la moitie haute de la card.
-          if (cardRect) {
-            var btnRect = btn.getBoundingClientRect();
-            var btnRelativeY = btnRect.top - cardRect.top;
-            if (btnRelativeY < 0 || btnRelativeY > cardRect.height * 0.5) {
-              continue;
-            }
-          }
-          return true;
         }
         return false;
       }
