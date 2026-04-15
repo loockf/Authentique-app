@@ -126,6 +126,48 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
     snapEnabledRef.current = prefs.navSnapToEdge;
   }, [prefs.navSnapToEdge]);
 
+  // Auto-snap a la transition OFF -> ON : si l'utilisateur drag le
+  // bouton au milieu de l'ecran avec "Aimanter" desactive, puis
+  // reactive le toggle, le bouton doit glisser tout seul vers le
+  // bord le plus proche. On ne le fait QUE sur la transition (pas
+  // au premier render, pas quand on passe ON -> OFF) et seulement
+  // si la position courante n'est pas deja collee a un bord.
+  const prevSnapEnabledRef = useRef(prefs.navSnapToEdge);
+  useEffect(() => {
+    const prev = prevSnapEnabledRef.current;
+    const next = prefs.navSnapToEdge;
+    prevSnapEnabledRef.current = next;
+
+    if (!(prev === false && next === true)) {
+      return;
+    }
+    if (isDraggingRef.current) {
+      // Cas tres improbable (toggle pendant un drag actif) — on laisse
+      // le release handler gerer le snap pour ne pas entrer en conflit.
+      return;
+    }
+
+    const w = dimRef.current.width;
+    const h = dimRef.current.height;
+    const clamped = clampPosition(currentPosRef.current, w, h);
+    const snapped = snapToEdge(clamped, w);
+
+    // Deja sur un bord (a un pixel pres) : pas besoin d'animer.
+    if (Math.abs(snapped.x - currentPosRef.current.x) < 1) {
+      return;
+    }
+
+    currentPosRef.current = snapped;
+    void saveNavPosition(snapped);
+    Animated.spring(pan, {
+      toValue: snapped,
+      useNativeDriver: false,
+      friction: 8,
+      tension: 60,
+    }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.navSnapToEdge]);
+
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Chargement de la position sauvegardee au montage.
