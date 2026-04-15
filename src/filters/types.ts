@@ -18,6 +18,8 @@ export type FilterPreferences = {
   hideLikeCounts: boolean;
   /** Mode Focus : ne garder que texte et photos, masquer tout le reste. */
   focusMode: boolean;
+  /** Le bouton flottant s'aimante au bord gauche/droit apres un drag. */
+  navSnapToEdge: boolean;
 };
 
 export const defaultPreferences: FilterPreferences = {
@@ -26,6 +28,7 @@ export const defaultPreferences: FilterPreferences = {
   hideReels: true,
   hideLikeCounts: false,
   focusMode: false,
+  navSnapToEdge: true,
 };
 
 /** Messages remontés du WebView vers React Native. */

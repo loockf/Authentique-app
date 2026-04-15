@@ -1,30 +1,26 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { InstagramScreen } from '../screens/InstagramScreen';
-import { FacebookScreen } from '../screens/FacebookScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { FloatingNav } from '../components/FloatingNav';
 
 /**
- * Navigation principale — Authentique utilise un Tab.Navigator de
- * react-navigation comme moteur de navigation, mais SANS la tab bar
- * par defaut. A la place, on fournit notre propre composant custom
- * <FloatingNav /> via le prop `tabBar`, qui est un cercle flottant
- * draggable (voir src/components/FloatingNav.tsx).
+ * Navigation principale — simplifiee a deux ecrans : Instagram et
+ * Parametres. Facebook a ete retire volontairement dans un
+ * refactoring de concentration (commit du 15 avril) — le code
+ * (FacebookScreen.tsx, facebook.ts) est conserve dans le repo pour
+ * etre rebranche facilement plus tard, mais aucune UI n'y mene
+ * actuellement.
  *
- * Ca permet de garder tous les benefices de react-navigation :
- *   - gestion du cycle de vie des ecrans (lazy: false, freezeOnBlur: false)
- *   - route state reactive
- *   - deep linking si un jour on en a besoin
- * tout en rendant zero chrome visible en bas de l'ecran. Les WebViews
- * Instagram et Facebook occupent ainsi 100% de la hauteur, sans etre
- * grignotees par une barre d'onglets qui denatuferait l'experience
- * de lecture.
+ * La tab bar native est remplacee par notre <FloatingNav /> : un
+ * bouton rond flottant qu'on peut tapoter pour basculer entre
+ * Instagram et Parametres, ou drag pour deplacer. Quand on est sur
+ * Instagram, le bouton affiche "⚙" (tap -> Parametres). Quand on
+ * est sur Parametres, il affiche "←" (tap -> retour Instagram).
  */
 
 type TabParamList = {
   Instagram: undefined;
-  Facebook: undefined;
   Paramètres: undefined;
 };
 
@@ -42,7 +38,6 @@ export function RootTabs() {
       tabBar={(props) => <FloatingNav {...props} />}
     >
       <Tab.Screen name="Instagram" component={InstagramScreen} />
-      <Tab.Screen name="Facebook" component={FacebookScreen} />
       <Tab.Screen name="Paramètres" component={SettingsScreen} />
     </Tab.Navigator>
   );

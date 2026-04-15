@@ -145,22 +145,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     /* -----------------------------------------------------------------
        Masquage des compteurs de likes
        -----------------------------------------------------------------
-       Les regles sont TOUJOURS presentes dans le bundle. C'est le body
-       class .authentique-hide-likes-enabled qui decide si elles
-       s'appliquent. Le JS toggle cette classe a chaque updateRouteMarker
-       en fonction de prefs.hideLikeCounts, ce qui rend le toggle
-       instantane meme apres un changement de preference (pas besoin
-       de re-injecter de CSS).
+       Les elements qu'on veut masquer sont taggues par le JS avec la
+       classe .authentique-hide-likes (via scanLikeCounts qui matche
+       regex sur textContent). Les regles ici se contentent d'appliquer
+       visibility: hidden quand le body porte la classe -enabled.
 
-       Le taggage de .authentique-hide-likes sur des elements cibles est
-       fait par scanLikeCounts() en JS via une regex qui reconnait les
-       patterns "1 074 J'aime", "1074 likes", etc. sur les spans feuilles.
-       La raison : les selecteurs CSS purs (aria-label, href*="liked_by")
-       ne captaient qu'une partie des cas sur Instagram mobile web
-       moderne, qui place souvent le compteur dans un span sibling du
-       bouton heart et non descendant.
+       On a renonce aux selecteurs CSS purs (aria-label, href*="liked_by")
+       parce qu'ils ne captaient qu'une fraction des patterns Instagram
+       modernes, ou le compteur est souvent un span sibling du bouton
+       heart et non descendant.
     */
-    body.authentique-hide-likes-enabled a[href*="liked_by"],
     body.authentique-hide-likes-enabled .authentique-hide-likes {
       visibility: hidden !important;
     }
@@ -168,41 +162,21 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     /* -----------------------------------------------------------------
        Mode Focus
        -----------------------------------------------------------------
-       Meme principe : regle toujours presente, activee via la body
-       class .authentique-focus-mode posee par le JS. On attenue les
-       icones d'action (like, comment, share, save) pour qu'elles
-       s'effacent visuellement tout en restant cliquables.
+       Meme approche par tagging : le JS scanne les boutons dont
+       l'aria-label matche un regex d'action (J'aime, Commenter,
+       Partager, Enregistrer, et leurs variantes FR/EN), leur pose la
+       classe .authentique-action-btn, et cette regle les attenue a
+       25% d'opacite quand le body porte .authentique-focus-mode.
 
-       IMPORTANT : on utilise l'operateur = (exact match) et pas
-       *= (contains). *="Comment" matchait "Comment allez-vous"
-       et d'autres tooltips francais ou "comment" signifie "how",
-       avec pour effet de grisaille toute l'interface des DMs. Liste
-       explicite des labels Instagram connus uniquement.
+       Pourquoi JS plutot que CSS : les aria-labels d'Instagram sont
+       souvent plus longs que "J'aime" seul (p.ex. "J'aime ce post",
+       "Commenter cette publication"). Les matchs exacts CSS (= "J'aime")
+       ratent tout ca, et les matchs partiels CSS (*="Comment") matchent
+       trop (p.ex. "Comment allez-vous" comme tooltip). Le regex JS
+       fait les deux : patterns start-of-string precis qui attrapent
+       "J'aime" et "J'aime ce post" mais pas "J'aimerais".
     */
-    body.authentique-focus-mode button[aria-label="J'aime" i],
-    body.authentique-focus-mode button[aria-label="Je n'aime plus" i],
-    body.authentique-focus-mode button[aria-label="Like" i],
-    body.authentique-focus-mode button[aria-label="Unlike" i],
-    body.authentique-focus-mode button[aria-label="Commenter" i],
-    body.authentique-focus-mode button[aria-label="Comment" i],
-    body.authentique-focus-mode button[aria-label="Partager" i],
-    body.authentique-focus-mode button[aria-label="Envoyer" i],
-    body.authentique-focus-mode button[aria-label="Share" i],
-    body.authentique-focus-mode button[aria-label="Enregistrer" i],
-    body.authentique-focus-mode button[aria-label="Ne plus enregistrer" i],
-    body.authentique-focus-mode button[aria-label="Save" i],
-    body.authentique-focus-mode button[aria-label="Remove" i],
-    body.authentique-focus-mode [role="button"][aria-label="J'aime" i],
-    body.authentique-focus-mode [role="button"][aria-label="Je n'aime plus" i],
-    body.authentique-focus-mode [role="button"][aria-label="Like" i],
-    body.authentique-focus-mode [role="button"][aria-label="Unlike" i],
-    body.authentique-focus-mode [role="button"][aria-label="Commenter" i],
-    body.authentique-focus-mode [role="button"][aria-label="Comment" i],
-    body.authentique-focus-mode [role="button"][aria-label="Partager" i],
-    body.authentique-focus-mode [role="button"][aria-label="Envoyer" i],
-    body.authentique-focus-mode [role="button"][aria-label="Share" i],
-    body.authentique-focus-mode [role="button"][aria-label="Enregistrer" i],
-    body.authentique-focus-mode [role="button"][aria-label="Save" i] {
+    body.authentique-focus-mode .authentique-action-btn {
       opacity: 0.25 !important;
     }
 
@@ -605,35 +579,41 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }
       }
 
-      // Regex qui reconnait un compteur de likes Instagram sur un span
-      // feuille. On impose DEUX choses pour eviter les faux positifs :
+      // Regexes qui reconnaissent les compteurs de likes Instagram sur
+      // des spans feuilles. On accepte plus de formes qu'avant parce
+      // que les selections precedentes etaient trop strictes et
+      // ratent les cas ou le compteur est juste un nombre "1 074"
+      // sans "J'aime" visible (seul le bouton heart a le label).
       //
-      //  1. Le texte doit commencer par un CHIFFRE (donc "J'aime bien"
-      //     ne matche pas, seul "1 074 J'aime" peut matcher).
-      //  2. Le texte doit se terminer EXACTEMENT par "J'aime" / "likes"
-      //     / "Likes" / "K"/"M" isole (pour les reels counts compacts
-      //     comme "14,9 k"). L'ancre end-of-string garantit qu'il n'y
-      //     a rien apres — donc "1 074 J'aime bien ca" ne matche pas
-      //     non plus (la phrase a du texte apres le pattern).
-      //
-      // Le second regex capture "Aime par X" / "Aimes par X" (la phrase
-      // "Aime par 1 200 personnes" sous un post) avec un pattern
-      // separe parce que cette forme ne commence pas par un chiffre.
-      var LIKE_COUNT_WITH_NUMBER_REGEX = /^\s*\d[\d.,\u00A0\s]*\s*(K|M|k|m)?\s*(mentions?\s+)?(J['’]aime|likes?|Likes?)\s*$/;
-      var LIKE_COUNT_PURE_NUMBER_REGEX = /^\s*\d[\d.,\u00A0\s]*\s*(K|M|k|m)\s*$/;
-      var LIKE_COUNT_AIMES_PAR_REGEX = /^\s*Aim[eé]s?\s+par\s+\S/;
+      // Regexes en tableau pour pouvoir iterer proprement, avec /i
+      // (case-insensitive) pour tolerer les variantes.
+      var LIKE_COUNT_REGEXES = [
+        // "1 074 J'aime" / "1 074 likes" / "1 074 mentions J'aime"
+        /^\s*\d[\d.,\u00A0\s]*\s*(k|m)?\s*(mentions?\s+)?(j['’]aime|likes?)\s*$/i,
+        // "14,9 k" / "1.2M" — pure number compact counter
+        /^\s*\d[\d.,\u00A0\s]*\s*(k|m)\s*$/i,
+        // "Aime par X" / "Aimee par X" / "Aimes par X"
+        /^\s*aim[eé]?s?\s+par\s+\S/i,
+        // "Liked by X"
+        /^\s*liked\s+by\s+\S/i,
+        // Nombre seul court (3-10 chars) — probablement un compteur
+        // sous un bouton d'action. On reste prudent avec la longueur
+        // pour eviter de matcher des dates, des timestamps, etc.
+        /^\s*\d{1,3}(?:[\s.,\u00A0]\d{3})*\s*$/,
+      ];
+
+      function matchesLikeCountPattern(text) {
+        for (var i = 0; i < LIKE_COUNT_REGEXES.length; i++) {
+          if (LIKE_COUNT_REGEXES[i].test(text)) { return true; }
+        }
+        return false;
+      }
 
       function scanLikeCounts() {
-        // Skip entierement si la pref est OFF. Ca evite une iteration
-        // sur tous les spans du document qui a du cout non-negligeable
-        // sur les longues pages Instagram. Quand la pref passe de OFF
-        // a ON, fullScan est declenche via __authentiqueUpdatePrefs et
-        // tagge a ce moment-la.
         if (!prefs.hideLikeCounts) { return; }
-
-        // Caching : on n'itere que les spans jamais vus. Le premier
-        // scan sur une page tagge tout, les scans suivants ne traitent
-        // que les nouveaux spans (ceux du lazy-load au scroll).
+        // Caching par attribut. On iteres les spans feuilles uniquement
+        // (pas d'enfants), avec texte court. La regex couvre plusieurs
+        // formes : "1 074 J'aime", "14,9 k", "Aimé par X", nombre seul.
         var spans = document.querySelectorAll('span:not([' + SCANNED_ATTR + '])');
         for (var i = 0; i < spans.length; i++) {
           var el = spans[i];
@@ -641,10 +621,34 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           if (el.children && el.children.length > 0) { continue; }
           var t = (el.textContent || '').trim();
           if (!t || t.length > 40) { continue; }
-          if (LIKE_COUNT_WITH_NUMBER_REGEX.test(t) ||
-              LIKE_COUNT_PURE_NUMBER_REGEX.test(t) ||
-              LIKE_COUNT_AIMES_PAR_REGEX.test(t)) {
+          if (matchesLikeCountPattern(t)) {
             el.classList.add('authentique-hide-likes');
+          }
+        }
+      }
+
+      // --- Mode Focus : tagging des boutons d'action -------------------
+      //
+      // Scan les boutons dont l'aria-label commence par un mot-cle
+      // d'action (J'aime, Like, Commenter, Partager, Enregistrer, etc.)
+      // et les tagge avec .authentique-action-btn. Le CSS applique
+      // ensuite opacity: 0.25 quand body.authentique-focus-mode est
+      // actif. Regex start-of-string pour matcher "J'aime" mais pas
+      // "J'aimerais bien" ni "Commenter allez-vous".
+      var ACTION_LABEL_REGEX = /^(j['’]aime|je n['’]aime plus|like|unlike|commenter|comment\b|partager|envoyer|share|enregistrer|ne plus enregistrer|save\b|remove|post)/i;
+
+      function scanActionButtons() {
+        var buttons = document.querySelectorAll(
+          'button:not([' + SCANNED_ATTR + ']), ' +
+          '[role="button"]:not([' + SCANNED_ATTR + '])'
+        );
+        for (var i = 0; i < buttons.length; i++) {
+          var btn = buttons[i];
+          btn.setAttribute(SCANNED_ATTR, '1');
+          var label = btn.getAttribute && btn.getAttribute('aria-label');
+          if (!label) { continue; }
+          if (ACTION_LABEL_REGEX.test(label.trim())) {
+            btn.classList.add('authentique-action-btn');
           }
         }
       }
@@ -1102,10 +1106,60 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         scanSuggestions();
         scanReels();
         scanLikeCounts();
+        scanActionButtons();
         scanReelsFullscreen();
         scanExplore();
         scanDirectSuggestions();
+        scanReelOverlaySuggestions();
         closeOpenInAppBanners();
+      }
+
+      // --- Scanner "Suggestions" sous un Reel DM -----------------------
+      // Quand un ami nous partage un Reel en DM et qu'on l'ouvre, Instagram
+      // charge aussi les reels suivants en-dessous sous un header
+      // "Suggestions" ou "Plus de Reels". On les masque pour que
+      // l'utilisateur ne soit pas tente de scroller vers l'algo.
+      //
+      // Ne tourne QUE quand isDMReelOverlayOpen() est vrai, donc pas de
+      // risque de masquer du contenu legitime dans l'inbox ou un thread.
+      var REEL_OVERLAY_SUGGEST_NEEDLES = [
+        'Suggestions',
+        'Suggestions pour vous',
+        'Suggested for you',
+        'Plus de Reels',
+        'More Reels',
+        'Reels suggérés',
+        'Suggested reels',
+      ];
+      function scanReelOverlaySuggestions() {
+        if (!isDMReelOverlayOpen()) { return; }
+        var headings = document.querySelectorAll('h2, h3, h4, [role="heading"], span');
+        for (var i = 0; i < headings.length; i++) {
+          var h = headings[i];
+          if (h.classList.contains('authentique-hidden')) { continue; }
+          if (h.children && h.children.length > 1) { continue; }
+          var t = (h.textContent || '').trim();
+          if (!t || t.length > 40) { continue; }
+          var matched = false;
+          for (var j = 0; j < REEL_OVERLAY_SUGGEST_NEEDLES.length; j++) {
+            if (t === REEL_OVERLAY_SUGGEST_NEEDLES[j]) { matched = true; break; }
+          }
+          if (!matched) { continue; }
+          // Walk up un peu et hide le conteneur substantiel
+          var container = h.parentElement;
+          var depth = 0;
+          while (container && container !== document.body && depth < 6) {
+            if (container.offsetHeight >= 100) { break; }
+            container = container.parentElement;
+            depth++;
+          }
+          if (container && container !== document.body) {
+            var mainEl = document.querySelector('main') || document.querySelector('[role="main"]');
+            if (container !== mainEl && !(mainEl && container.contains(mainEl))) {
+              hide(container, 'reel-overlay-suggestion');
+            }
+          }
+        }
       }
 
       /**
@@ -1226,9 +1280,100 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }
       }
 
+      // --- Swipe horizontal pour naviguer entre onglets Instagram -----
+      //
+      // L'app native Instagram supporte le swipe horizontal pour passer
+      // d'un onglet a l'autre (home -> search -> reels -> direct -> profil).
+      // Mobile web ne l'a qu'en edge-swipe via la nav "back/forward" iOS.
+      // On implemente une version centrale : si l'utilisateur swipe
+      // horizontalement > 80px sur une page "root" (pas un post detail,
+      // pas une story, pas un reel fullscreen), on clique programmatiquement
+      // le lien de l'onglet cible dans la bottom nav d'Instagram.
+      //
+      // Precautions :
+      //  - allowsBackForwardNavigationGestures est desactive cote RN WebView
+      //    pour ne plus avoir de conflit avec l'edge-swipe natif.
+      //  - On ne declenche que sur les routes root (/, /explore/, /reels/,
+      //    /direct/inbox/) et jamais sur les routes nested (/p/, /reel/,
+      //    /stories/, /direct/t/).
+      //  - On ignore les swipes qui partent d'un element interactif type
+      //    [role="presentation"] (carousel), [role="button"] (clickable).
+      //  - On exige un mouvement horizontal dominant (|dx| > 2 × |dy|) et
+      //    une duree courte (< 500ms) pour ne pas confondre avec un scroll.
+      var TAB_ROUTE_ORDER = ['/', '/explore/', '/reels/', '/direct/inbox/'];
+      function isSwipableRootRoute() {
+        var p = location.pathname || '';
+        if (p === '' || p === '/') { return true; }
+        if (p === '/explore/' || p === '/explore') { return true; }
+        if (p === '/reels/' || p === '/reels') { return true; }
+        if (p === '/direct/inbox/' || p === '/direct/inbox') { return true; }
+        return false;
+      }
+      function getCurrentTabRouteIndex() {
+        var p = location.pathname || '';
+        if (p === '' || p === '/') { return 0; }
+        if (p.indexOf('/explore') === 0) { return 1; }
+        if (p.indexOf('/reels') === 0) { return 2; }
+        if (p.indexOf('/direct') === 0) { return 3; }
+        return -1;
+      }
+      function findTabLink(route) {
+        // Cherche un <a href> qui correspond a la route cible, en
+        // prefereant ceux dans la bottom nav (role=tablist ou role=link).
+        // Les selecteurs exacts varient mais href commence par notre route.
+        var candidates = document.querySelectorAll('a[href^="' + route + '"]');
+        // Retour du premier visible
+        for (var i = 0; i < candidates.length; i++) {
+          var a = candidates[i];
+          if (a.offsetWidth > 0 && a.offsetHeight > 0) { return a; }
+        }
+        return null;
+      }
+      function navigateToTabByIndex(index) {
+        if (index < 0 || index >= TAB_ROUTE_ORDER.length) { return; }
+        var route = TAB_ROUTE_ORDER[index];
+        var link = findTabLink(route);
+        if (link && typeof link.click === 'function') {
+          link.click();
+        } else {
+          // Fallback : navigation directe
+          try { location.href = route; } catch (e) {}
+        }
+      }
+      var tabSwipeStartX = 0;
+      var tabSwipeStartY = 0;
+      var tabSwipeStartTime = 0;
+      function installTabSwipeNav() {
+        document.addEventListener('touchstart', function(e) {
+          if (e.touches && e.touches.length === 1) {
+            tabSwipeStartX = e.touches[0].clientX;
+            tabSwipeStartY = e.touches[0].clientY;
+            tabSwipeStartTime = Date.now();
+          }
+        }, { passive: true });
+
+        document.addEventListener('touchend', function(e) {
+          if (!e.changedTouches || e.changedTouches.length !== 1) { return; }
+          if (!isSwipableRootRoute()) { return; }
+          var dx = e.changedTouches[0].clientX - tabSwipeStartX;
+          var dy = e.changedTouches[0].clientY - tabSwipeStartY;
+          var elapsed = Date.now() - tabSwipeStartTime;
+          if (Math.abs(dx) < 80) { return; }
+          if (Math.abs(dx) < Math.abs(dy) * 2) { return; }
+          if (elapsed > 500) { return; }
+
+          var currentIndex = getCurrentTabRouteIndex();
+          if (currentIndex < 0) { return; }
+          // Swipe gauche (dx < 0) -> onglet suivant, swipe droite -> precedent
+          var nextIndex = dx < 0 ? currentIndex + 1 : currentIndex - 1;
+          navigateToTabByIndex(nextIndex);
+        }, { passive: true });
+      }
+
       function start() {
         injectReelsWaitingOverlay();
         injectExploreEmptyState();
+        installTabSwipeNav();
         // Premier full scan : updateRouteMarker + tous les scanners
         // (sponsored, suggestions, reels, explore, DM, etc.).
         fullScan();

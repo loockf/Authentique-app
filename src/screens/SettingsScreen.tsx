@@ -42,6 +42,11 @@ const TOGGLES: Toggle[] = [
     label: 'Mode Focus',
     description: 'Atténue les boutons d\'action pour ne laisser que le contenu',
   },
+  {
+    key: 'navSnapToEdge',
+    label: 'Aimanter le bouton',
+    description: 'Le bouton flottant glisse vers le bord le plus proche après un drag',
+  },
 ];
 
 export function SettingsScreen() {

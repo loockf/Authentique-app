@@ -128,8 +128,21 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         onLoadStart={handleLoadStart}
         onMessage={handleMessage}
         // --- UX ----------------------------------------------------------
-        allowsBackForwardNavigationGestures={true}
+        // allowsBackForwardNavigationGestures: false parce que notre script
+        // injecte (installTabSwipeNav) prend en charge le swipe horizontal
+        // pour naviguer entre les onglets Instagram (home, search, reels,
+        // direct). Si on laisse iOS faire son swipe-back natif en meme
+        // temps, les deux rentrent en conflit et aucun des deux ne marche
+        // correctement.
+        allowsBackForwardNavigationGestures={false}
         pullToRefreshEnabled={true}
+        // Masque la barre iOS ⬆️⬇️✅ qui apparait au-dessus du clavier
+        // quand un input HTML est focus. Elle est utile pour naviguer
+        // entre les inputs d'un formulaire classique, mais totalement
+        // inutile dans Instagram (un seul input visible a la fois) et
+        // elle denature l'experience en ajoutant une ligne visuelle
+        // supplementaire au-dessus du clavier.
+        hideKeyboardAccessoryView={true}
         // --- Autoplay éventuel (stories, reels) --------------------------
         allowsInlineMediaPlayback={true}
         mediaPlaybackRequiresUserAction={false}
