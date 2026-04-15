@@ -1138,7 +1138,87 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         scanExplore();
         scanDirectSuggestions();
         scanReelOverlaySuggestions();
+        scanSponsoredStories();
         closeOpenInAppBanners();
+      }
+
+      // --- Scanner stories sponsorisees --------------------------------
+      //
+      // Quand l'utilisateur ouvre la liste des stories de ses amis,
+      // Instagram glisse parfois une story sponsorisee au milieu. On la
+      // detecte par son header qui contient "Sponsorise" en texte, et
+      // on skip automatiquement a la story suivante en simulant le
+      // tap-to-advance sur le cote droit de l'ecran (ou via un bouton
+      // "Next" s'il existe).
+      //
+      // Safety : on limite a 10 skips rapides (< 200ms d'ecart) pour ne
+      // pas partir en boucle infinie si on tombe sur une serie de stories
+      // sponsorisees consecutives.
+      var lastStorySkipTime = 0;
+      var storySkipBurstCount = 0;
+
+      function skipToNextStory() {
+        var now = Date.now();
+        if (now - lastStorySkipTime < 200) {
+          storySkipBurstCount++;
+          if (storySkipBurstCount > 10) { return; }
+        } else {
+          storySkipBurstCount = 0;
+        }
+        lastStorySkipTime = now;
+
+        // Strategie 1 : bouton next explicite si Instagram en expose un
+        var nextBtn = document.querySelector(
+          '[aria-label*="Story suivante" i], ' +
+          '[aria-label*="Next story" i], ' +
+          '[aria-label*="suivante" i]'
+        );
+        if (nextBtn && typeof nextBtn.click === 'function') {
+          nextBtn.click();
+          return;
+        }
+
+        // Strategie 2 : simuler un tap sur la zone tap-to-advance
+        // (cote droit du viewport, milieu vertical)
+        var x = Math.floor(window.innerWidth * 0.85);
+        var y = Math.floor(window.innerHeight * 0.5);
+        var target = document.elementFromPoint(x, y);
+        while (target && target !== document.body) {
+          if (typeof target.click === 'function') {
+            try { target.click(); return; } catch (e) {}
+          }
+          target = target.parentElement;
+        }
+      }
+
+      function scanSponsoredStories() {
+        if (!prefs.hideAds) { return; }
+        var p = location.pathname || '';
+        if (p.indexOf('/stories/') !== 0) { return; }
+
+        // On cherche un element visible dans la zone haute du viewport
+        // (< 180px du top) dont le textContent est exactement une des
+        // needles de sponsorisation. Le header de story d'Instagram
+        // place le label "Sponsorise" juste sous le pseudo, toujours
+        // en haut a gauche.
+        var spans = document.querySelectorAll('span, div');
+        for (var i = 0; i < spans.length; i++) {
+          var el = spans[i];
+          if (el.children && el.children.length > 1) { continue; }
+          var rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+          if (!rect || rect.top > 180 || rect.top < 0) { continue; }
+          if (rect.width === 0 || rect.height === 0) { continue; }
+          var t = (el.textContent || '').trim();
+          if (!t || t.length > 40) { continue; }
+          if (t === 'Sponsorisé' ||
+              t === 'Sponsorisée' ||
+              t === 'Sponsored' ||
+              t === 'Partenariat rémunéré' ||
+              t === 'Paid partnership') {
+            skipToNextStory();
+            return;
+          }
+        }
       }
 
       // --- Scanner "Suggestions" sous un Reel DM -----------------------
