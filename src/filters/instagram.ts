@@ -287,17 +287,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        a partage reste un geste social legitime. Seul le SCROLL
        VERTICAL reste bloque pour empecher de tomber dans l'algo. */
 
-    /* Flash-silent : masque le dropdown de selection de feed pendant
-       la petite fenetre ou notre JS l'ouvre pour basculer sur
-       "Suivi(e)". Sans ca, l'utilisateur voit le menu s'ouvrir et se
-       fermer au lancement de l'app, comme une animation non voulue.
-       On pose la classe juste avant le click synthetique, on la retire
-       des qu'on a fini (match clique ou fallback Escape). */
-    body.authentique-flash-silent [role="menu"],
-    body.authentique-flash-silent [role="menuitem"] {
-      visibility: hidden !important;
-    }
-
     /* -----------------------------------------------------------------
        Etat vide de la page Explore (loupe) en mode idle
        -----------------------------------------------------------------
@@ -961,108 +950,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }
       }
 
-      /**
-       * Tente de basculer de "Pour vous" vers "Abonnements".
-       *
-       * Version renforcee : on retente au MAXIMUM 3 fois par route visitee
-       * (pour ne pas spammer des clics si l'utilisateur a deliberement
-       * choisi "Pour vous"), avec un cooldown de 2 secondes entre deux
-       * tentatives pour laisser le dropdown apparaitre. Si on est sur une
-       * autre route, on reset le compteur pour pouvoir re-tenter quand
-       * l'utilisateur revient sur le fil.
-       */
-      // Labels du feed cible selon la localisation et les variantes
-      // FR d'inclusivite utilisees par Instagram. "Suivi(e)" avec le
-      // "(e)" entre parentheses est le label actuel de la home en FR ;
-      // "Abonnements" est un ancien label qu'on garde comme fallback.
-      var FOLLOWING_TARGET_NEEDLES = [
-        'Suivi(e)',
-        'Suivi',
-        'Suivis',
-        'Abonnements',
-        'Following',
-      ];
-
-      var enforceAttempts = 0;
-      var enforceLastAttempt = 0;
-      var enforceLastRoute = '';
-      function enforceFollowingFeed() {
-        var route = location.pathname || '';
-        if (route !== enforceLastRoute) {
-          enforceLastRoute = route;
-          enforceAttempts = 0;
-          enforceLastAttempt = 0;
-        }
-        if (enforceAttempts >= 3) { return; }
-        var now = Date.now();
-        if (now - enforceLastAttempt < 2000) { return; }
-
-        // On ne tente que sur la home du feed.
-        if (route !== '/' && route !== '') { return; }
-
-        var allSpans = document.querySelectorAll('h1, h2, span, div[role="button"]');
-        for (var i = 0; i < allSpans.length; i++) {
-          var el = allSpans[i];
-          var t = (el.textContent || '').trim();
-          if (t !== 'Pour vous' && t !== 'For you' && t !== 'Suggestions') { continue; }
-
-          enforceAttempts++;
-          enforceLastAttempt = now;
-          var clickable = el.closest('[role="button"]') || el.parentElement;
-          if (!clickable) { return; }
-
-          // Flash-silent : on pose la classe *avant* le click pour que
-          // le dropdown s'ouvre deja invisible, le JS clique la bonne
-          // option encore invisible, et on retire la classe quand tout
-          // est termine. Du point de vue utilisateur, aucun flash.
-          try { document.body.classList.add('authentique-flash-silent'); } catch (e) {}
-
-          var finish = function() {
-            try { document.body.classList.remove('authentique-flash-silent'); } catch (e) {}
-          };
-
-          try {
-            clickable.click();
-            setTimeout(function() {
-              var options = document.querySelectorAll('[role="menuitem"] span, [role="option"] span, div[role="dialog"] span');
-              var matched = false;
-              for (var j = 0; j < options.length; j++) {
-                var ot = (options[j].textContent || '').trim();
-                for (var k = 0; k < FOLLOWING_TARGET_NEEDLES.length; k++) {
-                  if (ot === FOLLOWING_TARGET_NEEDLES[k]) {
-                    var target = options[j].closest('[role="menuitem"]') ||
-                                 options[j].closest('[role="option"]') ||
-                                 options[j].closest('[role="button"]') ||
-                                 options[j];
-                    if (target) { target.click(); matched = true; }
-                    break;
-                  }
-                }
-                if (matched) { break; }
-              }
-              // Si on n'a rien clique, on ferme le dropdown pour ne pas
-              // le laisser ouvert par-dessus l'UI. Deux tentatives :
-              // d'abord un Escape key event (ferme les menus ARIA),
-              // puis un clic sur body comme filet de securite.
-              if (!matched) {
-                try {
-                  var esc = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true });
-                  document.dispatchEvent(esc);
-                } catch (e) {}
-                try {
-                  var bodyClick = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
-                  (document.body || document.documentElement).dispatchEvent(bodyClick);
-                } catch (e) {}
-              }
-              // On attend un tout petit peu apres le click ou le
-              // fallback Escape pour que Instagram ait ferme son
-              // menu, puis on retire la classe flash-silent.
-              setTimeout(finish, 120);
-            }, 400);
-          } catch (e) { finish(); }
-          return;
-        }
-      }
+      // Note : une version precedente basculait automatiquement le fil
+      // home d'Instagram de "Pour vous" vers "Suivi(e)" via une
+      // simulation de click sur le dropdown. Retire en concertation
+      // avec l'utilisateur : "Pour vous" est bien filtree par nos
+      // scanners (pubs, suggestions, reels, etc.) et garde des
+      // avantages legitimes (la story personnelle reste visible en
+      // haut pour voir les reactions). Aucun benefice a forcer la
+      // bascule. Le code est supprime pour ne pas laisser une
+      // dependance fragile sur des labels Instagram qui changent
+      // regulierement ("Abonnements" -> "Suivi(e)" en 2024).
 
       function fullScan() {
         if (!document.body) { return; }
@@ -1075,7 +972,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         scanExplore();
         scanDirectSuggestions();
         closeOpenInAppBanners();
-        enforceFollowingFeed();
       }
 
       /**
@@ -1177,8 +1073,8 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         injectReelsWaitingOverlay();
         injectExploreEmptyState();
         installReelLockTouchHandlers();
-        // Premier full scan : appelle aussi enforceFollowingFeed() et
-        // tous les scanners (sponsored, suggestions, explore, DM, etc.).
+        // Premier full scan : updateRouteMarker + tous les scanners
+        // (sponsored, suggestions, reels, explore, DM, etc.).
         fullScan();
 
         var observer = new MutationObserver(function(mutations) {
