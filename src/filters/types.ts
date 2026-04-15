@@ -28,7 +28,15 @@ export const defaultPreferences: FilterPreferences = {
 /** Messages remontés du WebView vers React Native. */
 export type FilterMessage =
   | { type: 'hidden-count'; count: number }
-  | { type: 'ready'; platform: 'instagram' | 'facebook' };
+  | { type: 'ready'; platform: 'instagram' | 'facebook' }
+  /**
+   * Signale à React Native que la route Instagram vient d'entrer ou
+   * de sortir de `/explore/`. Utilisé côté RN pour toggler la prop
+   * `pullToRefreshEnabled` du WebView : désactivée sur Explore (pour
+   * empêcher un reload qui flasherait du contenu non filtré), activée
+   * partout ailleurs.
+   */
+  | { type: 'route-explore-changed'; isOnExplore: boolean };
 
 /** Bundle CSS + JS produit pour une plateforme donnée. */
 export type FilterBundle = {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { useFilters } from '../context/FiltersContext';
@@ -67,6 +67,11 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
   const { bumpHiddenCount, prefs } = useFilters();
   const webviewRef = useRef<WebView>(null);
 
+  // Etat "on est sur /explore/" alimente par le script injecte via
+  // un message 'route-explore-changed'. Utilise pour toggler la prop
+  // pullToRefreshEnabled du WebView en dessous.
+  const [isOnExplore, setIsOnExplore] = useState(false);
+
   const installScript = useMemo(() => buildInstallScript(filters), [filters]);
 
   const handleMessage = useCallback(
@@ -77,6 +82,8 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         const message = JSON.parse(raw) as FilterMessage;
         if (message.type === 'hidden-count') {
           bumpHiddenCount(message.count);
+        } else if (message.type === 'route-explore-changed') {
+          setIsOnExplore(message.isOnExplore);
         }
         // Les messages 'ready' sont ignorés côté RN pour l'instant.
       } catch {
@@ -135,7 +142,14 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         // temps, les deux rentrent en conflit et aucun des deux ne marche
         // correctement.
         allowsBackForwardNavigationGestures={false}
-        pullToRefreshEnabled={true}
+        // Pull-to-refresh natif iOS desactive UNIQUEMENT quand on est
+        // sur /explore/. Le UIRefreshControl du UIScrollView de
+        // WKWebView est totalement retire a la volee, donc aucun
+        // geste de pull ne peut declencher un reload de la page. Sur
+        // les autres routes (home, reels, DMs), il reste actif. La
+        // valeur isOnExplore est alimentee par le script injecte via
+        // le message 'route-explore-changed' dans handleMessage.
+        pullToRefreshEnabled={!isOnExplore}
         // Masque la barre iOS ⬆️⬇️✅ qui apparait au-dessus du clavier
         // quand un input HTML est focus. Elle est utile pour naviguer
         // entre les inputs d'un formulaire classique, mais totalement

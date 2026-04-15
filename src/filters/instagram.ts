@@ -360,6 +360,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       var prefs = ${serializedPrefs};
       var hiddenCount = 0;
+      // Dernier etat d'appartenance a /explore/ envoye a React Native.
+      // Initialise a null pour qu'on emette systematiquement un
+      // premier message au tout premier updateRouteMarker, peu
+      // importe la valeur initiale. Ensuite on ne ré-emet que sur
+      // changement d'etat.
+      var lastReportedOnExplore = null;
 
       // --- Helpers ---------------------------------------------------------
 
@@ -648,6 +654,23 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // par le CSS pour masquer les spinners et reveler le message.
         var showExploreEmpty = isExploreRoute() && !isExploreSearchActive();
         document.body.classList.toggle('authentique-on-explore-idle', showExploreEmpty);
+
+        // --- Signalement du flag "on explore" vers React Native ------
+        //
+        // On informe la couche RN quand on ENTRE ou SORT de la route
+        // /explore/ pour qu'elle puisse toggler la prop
+        // pullToRefreshEnabled du WebView en consequence. Le but : le
+        // natif iOS UIRefreshControl est totalement retire quand on
+        // est sur Explore (donc pas de reload possible qui flashait
+        // du contenu non filtre), et reactive des qu'on en sort.
+        //
+        // On n'emet un message QUE quand l'etat change, pas a chaque
+        // tick de poll, pour limiter le bruit sur le pont JS<->RN.
+        var nowOnExplore = isExploreRoute();
+        if (nowOnExplore !== lastReportedOnExplore) {
+          lastReportedOnExplore = nowOnExplore;
+          post({ type: 'route-explore-changed', isOnExplore: nowOnExplore });
+        }
       }
 
       // --- Reels card detection (filtre contextuel "Suivre") -------------
@@ -1249,74 +1272,10 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }, { passive: true });
       }
 
-      // --- Blocage du pull-to-refresh sur /explore/ ---------------------
-      //
-      // Le pull-to-refresh natif iOS (UIRefreshControl attache au
-      // UIScrollView de WKWebView) declenche un reload complet de la
-      // page quand l'utilisateur tire vers le bas depuis le haut du
-      // scroll. Sur la route /explore/, ce reload reaffiche brievement
-      // les posts suggeres (~500ms de fenetre) avant que notre scanner
-      // ne les rattrape. Resultat : flash visible de contenu non voulu.
-      //
-      // On bloque le geste UNIQUEMENT sur /explore/ via deux listeners
-      // en capture phase :
-      //   1. touchstart "passif" -> on arme un flag ptrArmed si on est
-      //      sur /explore/ ET au scroll top.
-      //   2. touchmove "non-passif" -> si armed et la direction du
-      //      doigt est vers le bas, preventDefault().
-      //
-      // Le passive:false sur touchmove est INDISPENSABLE : un listener
-      // passif ne peut pas preventDefault, et le geste continuerait a
-      // etre transmis au UIScrollView natif qui declencherait le refresh.
-      //
-      // Le capture:true garantit qu'on s'execute avant les listeners
-      // bubble qu'Instagram pourrait avoir installes.
-      //
-      // Les autres onglets (home, reels, DMs) conservent leur
-      // pull-to-refresh natif sans interference.
-      var ptrStartY = 0;
-      var ptrArmed = false;
-
-      function installExplorePullToRefreshBlock() {
-        document.addEventListener('touchstart', function(e) {
-          ptrArmed = false;
-          if (!isExploreRoute()) { return; }
-          var scrollTop = window.scrollY ||
-            (document.documentElement && document.documentElement.scrollTop) ||
-            (document.body && document.body.scrollTop) || 0;
-          if (scrollTop > 0) { return; }
-          if (!e.touches || e.touches.length !== 1) { return; }
-          ptrStartY = e.touches[0].clientY;
-          ptrArmed = true;
-        }, { passive: true, capture: true });
-
-        document.addEventListener('touchmove', function(e) {
-          if (!ptrArmed) { return; }
-          if (!e.touches || e.touches.length !== 1) { return; }
-          var dy = e.touches[0].clientY - ptrStartY;
-          // Des que le doigt part vers le HAUT de l'ecran, c'est que
-          // l'utilisateur scrolle (il veut voir du contenu plus bas
-          // dans la grille de resultats). On desarme pour TOUT le
-          // reste du geste afin de ne pas interferer meme s'il fait
-          // ensuite un leger mouvement descendant — le scroll natif
-          // doit pouvoir gerer librement.
-          if (dy < 0) {
-            ptrArmed = false;
-            return;
-          }
-          // Sinon, doigt qui va vers le BAS de l'ecran = geste de
-          // pull-to-refresh. On bloque.
-          if (dy > 0) {
-            try { e.preventDefault(); } catch (err) {}
-          }
-        }, { passive: false, capture: true });
-      }
-
       function start() {
         injectReelsWaitingOverlay();
         injectExploreEmptyState();
         installTabSwipeNav();
-        installExplorePullToRefreshBlock();
         // Premier full scan : updateRouteMarker + tous les scanners
         // (sponsored, suggestions, reels, explore, DM, etc.).
         fullScan();
