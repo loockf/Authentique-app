@@ -17,7 +17,7 @@ import { loadNavPosition, saveNavPosition, type NavPosition } from '../storage/u
  * Mono-fonction : bascule entre l'ecran Instagram et l'ecran Parametres.
  * Plus de menu pill a deployer — un simple tap change l'ecran courant.
  *
- *  - Sur Instagram : le bouton affiche "⚙". Tap -> Parametres.
+ *  - Sur Instagram : le bouton affiche "☰". Tap -> Parametres.
  *  - Sur Parametres : le bouton affiche "←". Tap -> Instagram.
  *
  * Long-press ~400ms puis drag pour deplacer le bouton n'importe ou.
@@ -38,6 +38,14 @@ import { loadNavPosition, saveNavPosition, type NavPosition } from '../storage/u
  *  - currentPosRef est maintenant mis a jour IMMEDIATEMENT au lacher
  *    du drag (avant que la spring anime), pour qu'un tap suivant
  *    lise toujours la derniere position connue.
+ *  - La fleche retour Parametres -> Instagram ne fonctionnait plus apres
+ *    une premiere navigation a cause d'un classic stale closure bug :
+ *    le PanResponder est cree une seule fois via useRef(...).current et
+ *    capture les props `state` et `navigation` de CE premier render.
+ *    Quand on naviguait vers Parametres, state.index restait fige sur
+ *    0 (Instagram) dans la closure, et le tap suivant essayait de
+ *    renaviguer vers Parametres (route courante) = no-op. Fix : on lit
+ *    state/navigation via des refs mises a jour a chaque render.
  */
 
 const BUTTON_SIZE = 48;
@@ -47,21 +55,61 @@ const EDGE_MARGIN = 12;
 const TOP_SAFE_MARGIN = 60;
 const BOTTOM_SAFE_MARGIN = 40;
 
+/**
+ * Position par defaut au premier lancement : milieu-droite de l'ecran.
+ * Choisi pour etre a portee de pouce droit sur un iPhone tenu d'une
+ * main, et pour ne pas chevaucher la barre de status ni la home bar.
+ */
+function getDefaultPosition(width: number, height: number): NavPosition {
+  return {
+    x: width - BUTTON_SIZE - EDGE_MARGIN,
+    y: Math.max(TOP_SAFE_MARGIN, (height - BUTTON_SIZE) / 2),
+  };
+}
+
+/**
+ * Reinitialise la position du bouton flottant a sa valeur par defaut
+ * (milieu-droite) en la persistant dans AsyncStorage. Expose pour que
+ * l'ecran Parametres puisse offrir un bouton "Reinitialiser la position".
+ * Retourne la position ecrite pour que l'appelant puisse donner un
+ * feedback immediat a l'utilisateur.
+ */
+export async function resetNavPositionToDefault(
+  width: number,
+  height: number,
+): Promise<NavPosition> {
+  const defaultPos = getDefaultPosition(width, height);
+  await saveNavPosition(defaultPos);
+  return defaultPos;
+}
+
 export function FloatingNav({ state, navigation }: BottomTabBarProps) {
   const { width, height } = useWindowDimensions();
   const { prefs } = useFilters();
 
-  // Position initiale : haut-droite, sous la barre de status iOS.
-  const initialX = width - BUTTON_SIZE - EDGE_MARGIN;
-  const initialY = TOP_SAFE_MARGIN + 20;
+  // Position initiale : milieu-droite. Recalculee apres le chargement
+  // AsyncStorage si une position perso a ete sauvegardee.
+  const initialPos = getDefaultPosition(width, height);
 
   // Animated.ValueXY pour le rendu fluide du drag, currentPosRef comme
   // source de verite logique pour les handlers.
-  const pan = useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
-  const currentPosRef = useRef<NavPosition>({ x: initialX, y: initialY });
-  const dragStartRef = useRef<NavPosition>({ x: initialX, y: initialY });
+  const pan = useRef(new Animated.ValueXY(initialPos)).current;
+  const currentPosRef = useRef<NavPosition>(initialPos);
+  const dragStartRef = useRef<NavPosition>(initialPos);
   const dimRef = useRef({ width, height });
   const snapEnabledRef = useRef(prefs.navSnapToEdge);
+
+  // Refs pour les props navigation — mises a jour a chaque render pour
+  // que les closures du PanResponder voient TOUJOURS la derniere valeur,
+  // pas celle figee lors de la creation du PanResponder au premier render.
+  const stateRef = useRef(state);
+  const navigationRef = useRef(navigation);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+  useEffect(() => {
+    navigationRef.current = navigation;
+  }, [navigation]);
 
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
@@ -164,10 +212,14 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
           return;
         }
 
-        // Tap pur : bascule vers l'autre ecran.
-        const currentRouteName = state.routes[state.index]?.name;
+        // Tap pur : bascule vers l'autre ecran. On lit state/navigation
+        // via les refs pour eviter le stale closure (voir en-tete du
+        // fichier pour le detail du bug).
+        const currentState = stateRef.current;
+        const currentNav = navigationRef.current;
+        const currentRouteName = currentState.routes[currentState.index]?.name;
         const nextRoute = currentRouteName === 'Instagram' ? 'Paramètres' : 'Instagram';
-        navigation.navigate(nextRoute as never);
+        currentNav.navigate(nextRoute as never);
       },
       onPanResponderTerminate: () => {
         clearLongPressTimer();
@@ -178,7 +230,7 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
   ).current;
 
   const currentRouteName = state.routes[state.index]?.name ?? 'Instagram';
-  const glyph = currentRouteName === 'Instagram' ? '⚙' : '←';
+  const glyph = currentRouteName === 'Instagram' ? '☰' : '←';
 
   return (
     <Animated.View

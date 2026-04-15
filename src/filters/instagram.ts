@@ -143,44 +143,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     }
 
     /* -----------------------------------------------------------------
-       Masquage des compteurs de likes
-       -----------------------------------------------------------------
-       Les elements qu'on veut masquer sont taggues par le JS avec la
-       classe .authentique-hide-likes (via scanLikeCounts qui matche
-       regex sur textContent). Les regles ici se contentent d'appliquer
-       visibility: hidden quand le body porte la classe -enabled.
-
-       On a renonce aux selecteurs CSS purs (aria-label, href*="liked_by")
-       parce qu'ils ne captaient qu'une fraction des patterns Instagram
-       modernes, ou le compteur est souvent un span sibling du bouton
-       heart et non descendant.
-    */
-    body.authentique-hide-likes-enabled .authentique-hide-likes {
-      visibility: hidden !important;
-    }
-
-    /* -----------------------------------------------------------------
-       Mode Focus
-       -----------------------------------------------------------------
-       Meme approche par tagging : le JS scanne les boutons dont
-       l'aria-label matche un regex d'action (J'aime, Commenter,
-       Partager, Enregistrer, et leurs variantes FR/EN), leur pose la
-       classe .authentique-action-btn, et cette regle les attenue a
-       25% d'opacite quand le body porte .authentique-focus-mode.
-
-       Pourquoi JS plutot que CSS : les aria-labels d'Instagram sont
-       souvent plus longs que "J'aime" seul (p.ex. "J'aime ce post",
-       "Commenter cette publication"). Les matchs exacts CSS (= "J'aime")
-       ratent tout ca, et les matchs partiels CSS (*="Comment") matchent
-       trop (p.ex. "Comment allez-vous" comme tooltip). Le regex JS
-       fait les deux : patterns start-of-string precis qui attrapent
-       "J'aime" et "J'aime ce post" mais pas "J'aimerais".
-    */
-    body.authentique-focus-mode .authentique-action-btn {
-      opacity: 0.25 !important;
-    }
-
-    /* -----------------------------------------------------------------
        Classes universelles de masquage
        -----------------------------------------------------------------
        On a DEUX classes de masquage, et il faut bien comprendre la
@@ -579,80 +541,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }
       }
 
-      // Regexes qui reconnaissent les compteurs de likes Instagram sur
-      // des spans feuilles. On accepte plus de formes qu'avant parce
-      // que les selections precedentes etaient trop strictes et
-      // ratent les cas ou le compteur est juste un nombre "1 074"
-      // sans "J'aime" visible (seul le bouton heart a le label).
-      //
-      // Regexes en tableau pour pouvoir iterer proprement, avec /i
-      // (case-insensitive) pour tolerer les variantes.
-      var LIKE_COUNT_REGEXES = [
-        // "1 074 J'aime" / "1 074 likes" / "1 074 mentions J'aime"
-        /^\s*\d[\d.,\u00A0\s]*\s*(k|m)?\s*(mentions?\s+)?(j['’]aime|likes?)\s*$/i,
-        // "14,9 k" / "1.2M" — pure number compact counter
-        /^\s*\d[\d.,\u00A0\s]*\s*(k|m)\s*$/i,
-        // "Aime par X" / "Aimee par X" / "Aimes par X"
-        /^\s*aim[eé]?s?\s+par\s+\S/i,
-        // "Liked by X"
-        /^\s*liked\s+by\s+\S/i,
-        // Nombre seul court (3-10 chars) — probablement un compteur
-        // sous un bouton d'action. On reste prudent avec la longueur
-        // pour eviter de matcher des dates, des timestamps, etc.
-        /^\s*\d{1,3}(?:[\s.,\u00A0]\d{3})*\s*$/,
-      ];
-
-      function matchesLikeCountPattern(text) {
-        for (var i = 0; i < LIKE_COUNT_REGEXES.length; i++) {
-          if (LIKE_COUNT_REGEXES[i].test(text)) { return true; }
-        }
-        return false;
-      }
-
-      function scanLikeCounts() {
-        if (!prefs.hideLikeCounts) { return; }
-        // Caching par attribut. On iteres les spans feuilles uniquement
-        // (pas d'enfants), avec texte court. La regex couvre plusieurs
-        // formes : "1 074 J'aime", "14,9 k", "Aimé par X", nombre seul.
-        var spans = document.querySelectorAll('span:not([' + SCANNED_ATTR + '])');
-        for (var i = 0; i < spans.length; i++) {
-          var el = spans[i];
-          el.setAttribute(SCANNED_ATTR, '1');
-          if (el.children && el.children.length > 0) { continue; }
-          var t = (el.textContent || '').trim();
-          if (!t || t.length > 40) { continue; }
-          if (matchesLikeCountPattern(t)) {
-            el.classList.add('authentique-hide-likes');
-          }
-        }
-      }
-
-      // --- Mode Focus : tagging des boutons d'action -------------------
-      //
-      // Scan les boutons dont l'aria-label commence par un mot-cle
-      // d'action (J'aime, Like, Commenter, Partager, Enregistrer, etc.)
-      // et les tagge avec .authentique-action-btn. Le CSS applique
-      // ensuite opacity: 0.25 quand body.authentique-focus-mode est
-      // actif. Regex start-of-string pour matcher "J'aime" mais pas
-      // "J'aimerais bien" ni "Commenter allez-vous".
-      var ACTION_LABEL_REGEX = /^(j['’]aime|je n['’]aime plus|like|unlike|commenter|comment\b|partager|envoyer|share|enregistrer|ne plus enregistrer|save\b|remove|post)/i;
-
-      function scanActionButtons() {
-        var buttons = document.querySelectorAll(
-          'button:not([' + SCANNED_ATTR + ']), ' +
-          '[role="button"]:not([' + SCANNED_ATTR + '])'
-        );
-        for (var i = 0; i < buttons.length; i++) {
-          var btn = buttons[i];
-          btn.setAttribute(SCANNED_ATTR, '1');
-          var label = btn.getAttribute && btn.getAttribute('aria-label');
-          if (!label) { continue; }
-          if (ACTION_LABEL_REGEX.test(label.trim())) {
-            btn.classList.add('authentique-action-btn');
-          }
-        }
-      }
-
       /**
        * Bandeau "Ouvrir dans l'application".
        * Instagram l'injecte en <div role="dialog"> ou en bannière top-fixed.
@@ -760,13 +648,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // par le CSS pour masquer les spinners et reveler le message.
         var showExploreEmpty = isExploreRoute() && !isExploreSearchActive();
         document.body.classList.toggle('authentique-on-explore-idle', showExploreEmpty);
-
-        // Preferences utilisateur pilotees par des body classes. Les
-        // regles CSS correspondantes sont toujours presentes dans le
-        // bundle, ce qui rend le toggle instantane (hot reload sans
-        // re-injection de style).
-        document.body.classList.toggle('authentique-hide-likes-enabled', !!prefs.hideLikeCounts);
-        document.body.classList.toggle('authentique-focus-mode', !!prefs.focusMode);
       }
 
       // --- Reels card detection (filtre contextuel "Suivre") -------------
@@ -1105,8 +986,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         scanSponsored();
         scanSuggestions();
         scanReels();
-        scanLikeCounts();
-        scanActionButtons();
         scanReelsFullscreen();
         scanExplore();
         scanDirectSuggestions();
