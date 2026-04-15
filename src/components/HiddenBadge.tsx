@@ -4,12 +4,22 @@ import { colors } from '../theme/colors';
 
 /**
  * Badge discret indiquant le nombre d'éléments masqués depuis le début
- * de la session. Positionné en surimpression en bas à droite de l'écran,
- * sans jamais voler l'attention.
+ * de la session.
  *
- * Note Fabric : `pointerEvents` et `accessibilityElementsHidden` doivent
- * passer par `style` / des props explicitement booléens pour éviter les
- * erreurs de type côté New Architecture.
+ * Evolution : ce composant etait a l'origine un overlay absolu en
+ * bottom-right du WebView. Probleme : sur les onglets Instagram et
+ * Facebook, cette position recouvrait systematiquement un bouton de
+ * navigation interne (profil a droite sur IG, menu a droite sur FB),
+ * et bloquait les taps de l'utilisateur.
+ *
+ * Nouvelle implementation : une bande fine, non-flottante, qui prend
+ * sa propre place dans le layout au-dessus de la tab bar RN. Elle
+ * partage l'espace avec le WebView via flex, donc le WebView est
+ * raccourci de ~22px mais Instagram/Facebook garde le controle total
+ * de leur propre chrome. Aucun recouvrement possible.
+ *
+ * Le composant retourne `null` quand count <= 0 pour ne pas afficher
+ * une bande vide quand rien n'a encore ete masque.
  */
 export function HiddenBadge({ count }: { count: number }) {
   if (count <= 0) {
@@ -18,35 +28,38 @@ export function HiddenBadge({ count }: { count: number }) {
 
   return (
     <View
-      style={styles.container}
+      style={styles.strip}
       accessibilityElementsHidden={true}
       importantForAccessibility="no-hide-descendants"
     >
-      <Text style={styles.text}>{count} masqué{count > 1 ? 's' : ''}</Text>
+      <Text style={styles.text}>
+        {count} élément{count > 1 ? 's' : ''} masqué{count > 1 ? 's' : ''}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    right: 12,
-    bottom: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(28,28,26,0.72)',
-    // `pointerEvents` appartient au style sur la New Architecture
+  strip: {
+    // Bande fine, pleine largeur, au-dessus de la tab bar RN.
+    // Pas de position: absolute : elle fait partie du flex layout
+    // parent et repousse legerement le WebView vers le haut.
+    backgroundColor: colors.surface,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // `pointerEvents` dans le style sur la New Architecture ; la bande
+    // n'est pas interactive, ce qui evite qu'un tap accidentel soit
+    // mange par elle.
     pointerEvents: 'none',
   },
   text: {
-    color: '#fafaf7',
+    color: colors.textMuted,
     fontSize: 11,
     fontWeight: '500',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
 });
-
-// `colors` est importé volontairement pour garder la palette cohérente,
-// même si on utilise des valeurs RGBA directes pour la transparence.
-void colors;
