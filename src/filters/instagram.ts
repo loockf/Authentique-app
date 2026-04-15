@@ -356,6 +356,20 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
   const js = `
     (function() {
+      // Diagnostic : premiere chose qu'on fait c'est envoyer un ping
+      // pour prouver que le script charge. Si on voit pas ce message
+      // dans Metro, le script ne tourne pas du tout (probablement une
+      // erreur de parsing en amont).
+      try {
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'debug',
+            stage: 'script-alive',
+            url: location.href
+          }));
+        }
+      } catch (e) {}
+
       if (window.__authentiqueInstalled) {
         // Si le script est ré-injecté (hot reload des prefs), on met simplement
         // à jour les préférences et on relance un scan complet.
@@ -368,6 +382,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       var prefs = ${serializedPrefs};
       var hiddenCount = 0;
+      var fullScanTickCount = 0;
 
       // --- Helpers ---------------------------------------------------------
 
@@ -1016,6 +1031,8 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function fullScan() {
         if (!document.body) { return; }
+        fullScanTickCount++;
+        var hiddenBefore = hiddenCount;
         runSafely('updateRouteMarker', updateRouteMarker);
         runSafely('scanSponsored', scanSponsored);
         runSafely('scanSuggestions', scanSuggestions);
@@ -1025,6 +1042,26 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         runSafely('scanDirectSuggestions', scanDirectSuggestions);
         runSafely('scanReelOverlaySuggestions', scanReelOverlaySuggestions);
         runSafely('closeOpenInAppBanners', closeOpenInAppBanners);
+
+        // Diagnostic : on emet un summary tous les 4 ticks (= toutes
+        // les 2 secondes avec le poll 500ms) avec le nombre d'articles
+        // trouves dans la page, le nombre cumule d'elements caches, et
+        // la route courante. Aide a debugger a distance.
+        if (fullScanTickCount % 4 === 0) {
+          try {
+            var artCount = document.querySelectorAll('article, [role="article"]').length;
+            var hiddenHere = hiddenCount - hiddenBefore;
+            post({
+              type: 'debug',
+              stage: 'full-scan-summary',
+              tick: fullScanTickCount,
+              route: location.pathname,
+              articlesInDom: artCount,
+              hiddenThisTick: hiddenHere,
+              hiddenTotal: hiddenCount
+            });
+          } catch (e) {}
+        }
       }
 
       // scanSponsoredStories + skipToNextStory ont ete retires dans

@@ -59,7 +59,23 @@ function buildInstallScript(bundle: FilterBundle): string {
         }
       } catch (e) {}
     })();
-    ${bundle.js}
+    // Top-level try-catch autour du bundle JS : si bundle.js a une
+    // erreur de parsing ou throws au demarrage, on envoie l'erreur
+    // directement a React Native via postMessage. Critique pour
+    // debugger a distance quand rien ne marche.
+    try {
+      ${bundle.js}
+    } catch (bundleErr) {
+      try {
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'bundle-error',
+            message: (bundleErr && bundleErr.message) ? bundleErr.message : String(bundleErr),
+            stack: (bundleErr && bundleErr.stack) ? String(bundleErr.stack).slice(0, 500) : ''
+          }));
+        }
+      } catch (e2) {}
+    }
   `;
 }
 
@@ -78,10 +94,6 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         if (message.type === 'hidden-count') {
           bumpHiddenCount(message.count);
         } else if (message.type === 'scanner-error') {
-          // Erreur JS dans un scanner injecte : on la console-log
-          // pour qu'elle apparaisse dans Metro. Permet de debugger
-          // quand un scanner crash silencieusement et casse tout
-          // le pipeline.
           // eslint-disable-next-line no-console
           console.warn(
             '[Authentique filter error]',
@@ -89,6 +101,18 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
             message.message,
             message.stack,
           );
+        } else if (message.type === 'bundle-error') {
+          // eslint-disable-next-line no-console
+          console.warn(
+            '[Authentique BUNDLE error — script failed to parse or crashed]',
+            message.message,
+            message.stack,
+          );
+        } else if (message.type === 'debug') {
+          // Log les diagnostics dans Metro pour voir en live ce que
+          // fait le script injecte.
+          // eslint-disable-next-line no-console
+          console.log('[Authentique debug]', message);
         }
         // Les messages 'ready' sont ignorés côté RN pour l'instant.
       } catch {
