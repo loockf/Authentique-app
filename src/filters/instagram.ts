@@ -250,6 +250,45 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       touch-action: pan-x !important;
     }
 
+    /* Strictement, on ferme l'overflow vertical sur TOUS les descendants
+       quand le lock est actif, pas seulement body/main, parce que
+       Instagram utilise souvent un scroll container intermediaire qui
+       n'est ni body ni main et qui bypasse l'overflow des ancetres. */
+    body.authentique-reel-locked *:not(video):not(input):not(textarea) {
+      overscroll-behavior: none !important;
+      touch-action: pan-x !important;
+    }
+
+    /* Masquage des boutons d'action qui debordent a droite d'un Reel
+       ouvert en DM ou en /reel/:id. L'idee est simple : on ne consomme
+       que ce que l'ami a envoye, pas plus. Les icones like / commenter
+       / partager / enregistrer ne servent qu'a entretenir l'algo.
+       La zone de reponse en bas (chat input de la DM) reste visible
+       parce qu'elle est hors du scope du reel-card. */
+    body.authentique-reel-locked [aria-label*="aime" i],
+    body.authentique-reel-locked [aria-label*="Like" i],
+    body.authentique-reel-locked [aria-label*="Commenter" i],
+    body.authentique-reel-locked [aria-label*="Comment" i],
+    body.authentique-reel-locked [aria-label*="Partager" i],
+    body.authentique-reel-locked [aria-label*="Share" i],
+    body.authentique-reel-locked [aria-label*="Enregistrer" i],
+    body.authentique-reel-locked [aria-label*="Save" i],
+    body.authentique-reel-locked [aria-label*="Suivre" i],
+    body.authentique-reel-locked [aria-label*="Follow" i] {
+      display: none !important;
+    }
+
+    /* Flash-silent : masque le dropdown de selection de feed pendant
+       la petite fenetre ou notre JS l'ouvre pour basculer sur
+       "Suivi(e)". Sans ca, l'utilisateur voit le menu s'ouvrir et se
+       fermer au lancement de l'app, comme une animation non voulue.
+       On pose la classe juste avant le click synthetique, on la retire
+       des qu'on a fini (match clique ou fallback Escape). */
+    body.authentique-flash-silent [role="menu"],
+    body.authentique-flash-silent [role="menuitem"] {
+      visibility: hidden !important;
+    }
+
     /* -----------------------------------------------------------------
        Etat vide de la page Explore (loupe) en mode idle
        -----------------------------------------------------------------
@@ -545,15 +584,20 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         return p.indexOf('/explore') === 0;
       }
       function isExploreSearchActive() {
-        // Une recherche est active quand l'URL contient /search/ ou q=,
-        // ou quand l'input de recherche a une valeur non vide.
+        // Une recherche est active UNIQUEMENT quand l'URL le dit :
+        //   - pathname contient /search, OU
+        //   - query string contient q=
+        // Avant, on checkait aussi input.value, mais Instagram ne
+        // vide pas l'input quand l'utilisateur revient sur la home
+        // de la loupe depuis un ecran de resultats — donc l'input
+        // gardait "xyz" alors que l'user etait deja revenu sur la
+        // page de base, et notre etat vide n'apparaissait plus.
         if (!isExploreRoute()) { return false; }
         var p = location.pathname || '';
         if (p.indexOf('/search') !== -1) { return true; }
         var q = location.search || '';
         if (q.indexOf('q=') !== -1) { return true; }
-        var input = findExploreSearchInput();
-        return !!(input && input.value && input.value.length > 0);
+        return false;
       }
       function isDirectRoute() {
         // /direct/... = messagerie (inbox ou thread)
@@ -620,29 +664,33 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       function findReelCardFromVideo(video) {
         if (!video) { return null; }
         var el = video.parentElement;
+        var minHeight = Math.max(200, window.innerHeight * 0.4);
+        // Une card ne doit pas depasser 1.3 viewport — sinon elle
+        // englobe probablement deja le reel suivant ou une sidebar de
+        // suggestions, ce qui fait capter par erreur un bouton Suivre
+        // qui n'appartient pas a la video de depart.
+        var maxHeight = window.innerHeight * 1.3;
+
         while (el && el !== document.body) {
-          // On refuse de remonter au-dessus de main / role=main pour ne
-          // jamais capturer le conteneur racine du feed.
+          // Jamais au-dessus de main / role=main : c'est le conteneur
+          // racine du feed et son bouton Suivre (s'il y en a un) viendrait
+          // forcement d'un autre reel.
           if (el.tagName === 'MAIN') { return null; }
           if (el.getAttribute && el.getAttribute('role') === 'main') { return null; }
 
           // La card doit contenir exactement 1 video (celle de depart).
-          // Si elle en contient 2+, c'est qu'on est deja trop haut dans
-          // l'arbre (plusieurs reels consecutifs) et on s'arrete au
-          // niveau precedent.
+          // Si elle en contient 2+, on est deja trop haut et on arrete.
           var videoCount = 0;
           if (el.querySelectorAll) {
             videoCount = el.querySelectorAll('video').length;
           }
-          if (videoCount > 1) {
-            return el.parentElement === video.parentElement ? null :
-                   (el.firstElementChild || null);
-          }
+          if (videoCount > 1) { return null; }
 
-          // La card doit avoir une hauteur raisonnable (> 40% du
-          // viewport) pour ne pas etre confondue avec une miniature.
-          var minHeight = Math.max(200, window.innerHeight * 0.4);
-          if (el.offsetHeight >= minHeight) {
+          // Double borne sur la hauteur : la card doit etre substantielle
+          // (pour ne pas capter une mini-thumbnail) ET raisonnable (pas
+          // un conteneur de plusieurs viewports empiles).
+          var h = el.offsetHeight;
+          if (h >= minHeight && h <= maxHeight) {
             return el;
           }
 
@@ -651,24 +699,48 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         return null;
       }
 
+      /**
+       * Est-ce que la card expose un bouton "Suivre" legitime ?
+       *
+       * Version stricte pour reduire les faux positifs :
+       *  - Seuls les vrais elements interactifs (<button> ou role=button)
+       *    sont consideres — un simple <span>Suivre</span> ne suffit pas.
+       *  - Le bouton doit etre visible : offsetWidth > 0, offsetHeight > 0,
+       *    pas d'attribut hidden. Ca elimine les templates caches par
+       *    Instagram qui contiennent le mot "Suivre" mais ne sont pas
+       *    affiches.
+       *  - Le bouton doit etre dans la MOITIE SUPERIEURE de la card.
+       *    Instagram place le vrai Follow button a cote du username,
+       *    donc en haut. Les widgets de suggestions qui s'incrustent
+       *    parfois en bas d'une card sont ainsi ignores.
+       */
       function cardHasFollowButton(card) {
         if (!card) { return false; }
-        // Seuls les vrais elements interactifs sont consideres : un
-        // simple <span>Suivre</span> ne suffit plus. Meta utilise
-        // typiquement <div role="button"> ou <button> pour ce bouton.
+        var cardRect = card.getBoundingClientRect ? card.getBoundingClientRect() : null;
         var buttons = card.querySelectorAll('button, [role="button"]');
         for (var i = 0; i < buttons.length; i++) {
           var btn = buttons[i];
+          if (btn.offsetWidth === 0 || btn.offsetHeight === 0) { continue; }
+          if (btn.hasAttribute && btn.hasAttribute('hidden')) { continue; }
+
           var t = (btn.textContent || '').trim();
-          for (var j = 0; j < FOLLOW_NEEDLES.length; j++) {
-            if (t === FOLLOW_NEEDLES[j]) { return true; }
-          }
           var label = btn.getAttribute && btn.getAttribute('aria-label');
-          if (label) {
-            for (var k = 0; k < FOLLOW_NEEDLES.length; k++) {
-              if (label === FOLLOW_NEEDLES[k]) { return true; }
+          var matches = false;
+          for (var j = 0; j < FOLLOW_NEEDLES.length; j++) {
+            if (t === FOLLOW_NEEDLES[j]) { matches = true; break; }
+            if (label && label === FOLLOW_NEEDLES[j]) { matches = true; break; }
+          }
+          if (!matches) { continue; }
+
+          // Check position : uniquement dans la moitie haute de la card.
+          if (cardRect) {
+            var btnRect = btn.getBoundingClientRect();
+            var btnRelativeY = btnRect.top - cardRect.top;
+            if (btnRelativeY < 0 || btnRelativeY > cardRect.height * 0.5) {
+              continue;
             }
           }
+          return true;
         }
         return false;
       }
@@ -929,6 +1001,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           var clickable = el.closest('[role="button"]') || el.parentElement;
           if (!clickable) { return; }
 
+          // Flash-silent : on pose la classe *avant* le click pour que
+          // le dropdown s'ouvre deja invisible, le JS clique la bonne
+          // option encore invisible, et on retire la classe quand tout
+          // est termine. Du point de vue utilisateur, aucun flash.
+          try { document.body.classList.add('authentique-flash-silent'); } catch (e) {}
+
+          var finish = function() {
+            try { document.body.classList.remove('authentique-flash-silent'); } catch (e) {}
+          };
+
           try {
             clickable.click();
             setTimeout(function() {
@@ -962,8 +1044,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
                   (document.body || document.documentElement).dispatchEvent(bodyClick);
                 } catch (e) {}
               }
+              // On attend un tout petit peu apres le click ou le
+              // fallback Escape pour que Instagram ait ferme son
+              // menu, puis on retire la classe flash-silent.
+              setTimeout(finish, 120);
             }, 400);
-          } catch (e) {}
+          } catch (e) { finish(); }
           return;
         }
       }
@@ -1038,9 +1124,49 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       // --- Démarrage -------------------------------------------------------
 
+      /**
+       * Handler touchmove pose une fois au demarrage. Quand
+       * body.authentique-reel-locked est actif, on intercepte les
+       * swipes verticaux et on fait preventDefault() pour empecher le
+       * scroll — quel que soit le scroll container utilise par
+       * Instagram. Ca complete les regles CSS (overflow:hidden,
+       * touch-action:pan-x) pour les cas ou Instagram a son propre
+       * scroll container qui bypass les ancetres.
+       *
+       * On mesure la distance depuis le touchstart : si le mouvement
+       * est principalement vertical (delta Y > delta X), on bloque.
+       * Les taps purs (delta < 6) passent toujours pour que le
+       * play/pause du video fonctionne.
+       */
+      var _touchStartX = 0;
+      var _touchStartY = 0;
+      function installReelLockTouchHandlers() {
+        document.addEventListener('touchstart', function(e) {
+          if (e.touches && e.touches.length === 1) {
+            _touchStartX = e.touches[0].clientX;
+            _touchStartY = e.touches[0].clientY;
+          }
+        }, { passive: true });
+
+        document.addEventListener('touchmove', function(e) {
+          if (!document.body || !document.body.classList.contains('authentique-reel-locked')) {
+            return;
+          }
+          if (!e.touches || e.touches.length !== 1) { return; }
+          var dx = e.touches[0].clientX - _touchStartX;
+          var dy = e.touches[0].clientY - _touchStartY;
+          // On bloque le mouvement s'il est majoritairement vertical
+          // et depasse un seuil qui elimine les micro-mouvements.
+          if (Math.abs(dy) > 6 && Math.abs(dy) > Math.abs(dx)) {
+            try { e.preventDefault(); } catch (err) {}
+          }
+        }, { passive: false });
+      }
+
       function start() {
         injectReelsWaitingOverlay();
         injectExploreEmptyState();
+        installReelLockTouchHandlers();
         // Premier full scan : appelle aussi enforceFollowingFeed() et
         // tous les scanners (sponsored, suggestions, explore, DM, etc.).
         fullScan();
