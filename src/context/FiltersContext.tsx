@@ -68,6 +68,14 @@ export function FiltersProvider({ children }: { children: React.ReactNode }) {
     [prefs, ready, hiddenCount, setPref, bumpHiddenCount, resetHiddenCount],
   );
 
+  // On attend que les préférences soient chargées avant de monter les
+  // écrans, pour éviter que les WebViews et le Switch re-render avec un
+  // changement de valeurs en plein milieu du premier frame (ce qui
+  // peut provoquer des erreurs de reconciliation côté Fabric).
+  if (!ready) {
+    return null;
+  }
+
   return <FiltersContext.Provider value={value}>{children}</FiltersContext.Provider>;
 }
 
