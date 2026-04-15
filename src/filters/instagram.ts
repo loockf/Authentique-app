@@ -155,25 +155,36 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        icones d'action (like, comment, share, save) pour qu'elles
        s'effacent visuellement tout en restant cliquables.
 
-       Selecteurs directs sur aria-label plutot que sur section[role=group]
-       qui n'est plus utilise de maniere fiable par Instagram mobile web.
+       IMPORTANT : on utilise l'operateur = (exact match) et pas
+       *= (contains). *="Comment" matchait "Comment allez-vous"
+       et d'autres tooltips francais ou "comment" signifie "how",
+       avec pour effet de grisaille toute l'interface des DMs. Liste
+       explicite des labels Instagram connus uniquement.
     */
-    body.authentique-focus-mode button[aria-label*="aime" i],
-    body.authentique-focus-mode button[aria-label*="Like" i],
-    body.authentique-focus-mode button[aria-label*="Commenter" i],
-    body.authentique-focus-mode button[aria-label*="Comment" i],
-    body.authentique-focus-mode button[aria-label*="Partager" i],
-    body.authentique-focus-mode button[aria-label*="Share" i],
-    body.authentique-focus-mode button[aria-label*="Enregistrer" i],
-    body.authentique-focus-mode button[aria-label*="Save" i],
-    body.authentique-focus-mode [role="button"][aria-label*="aime" i],
-    body.authentique-focus-mode [role="button"][aria-label*="Like" i],
-    body.authentique-focus-mode [role="button"][aria-label*="Commenter" i],
-    body.authentique-focus-mode [role="button"][aria-label*="Comment" i],
-    body.authentique-focus-mode [role="button"][aria-label*="Partager" i],
-    body.authentique-focus-mode [role="button"][aria-label*="Share" i],
-    body.authentique-focus-mode [role="button"][aria-label*="Enregistrer" i],
-    body.authentique-focus-mode [role="button"][aria-label*="Save" i] {
+    body.authentique-focus-mode button[aria-label="J'aime" i],
+    body.authentique-focus-mode button[aria-label="Je n'aime plus" i],
+    body.authentique-focus-mode button[aria-label="Like" i],
+    body.authentique-focus-mode button[aria-label="Unlike" i],
+    body.authentique-focus-mode button[aria-label="Commenter" i],
+    body.authentique-focus-mode button[aria-label="Comment" i],
+    body.authentique-focus-mode button[aria-label="Partager" i],
+    body.authentique-focus-mode button[aria-label="Envoyer" i],
+    body.authentique-focus-mode button[aria-label="Share" i],
+    body.authentique-focus-mode button[aria-label="Enregistrer" i],
+    body.authentique-focus-mode button[aria-label="Ne plus enregistrer" i],
+    body.authentique-focus-mode button[aria-label="Save" i],
+    body.authentique-focus-mode button[aria-label="Remove" i],
+    body.authentique-focus-mode [role="button"][aria-label="J'aime" i],
+    body.authentique-focus-mode [role="button"][aria-label="Je n'aime plus" i],
+    body.authentique-focus-mode [role="button"][aria-label="Like" i],
+    body.authentique-focus-mode [role="button"][aria-label="Unlike" i],
+    body.authentique-focus-mode [role="button"][aria-label="Commenter" i],
+    body.authentique-focus-mode [role="button"][aria-label="Comment" i],
+    body.authentique-focus-mode [role="button"][aria-label="Partager" i],
+    body.authentique-focus-mode [role="button"][aria-label="Envoyer" i],
+    body.authentique-focus-mode [role="button"][aria-label="Share" i],
+    body.authentique-focus-mode [role="button"][aria-label="Enregistrer" i],
+    body.authentique-focus-mode [role="button"][aria-label="Save" i] {
       opacity: 0.25 !important;
     }
 
@@ -291,6 +302,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     body.authentique-reel-locked [role="main"] {
       overscroll-behavior: none !important;
       touch-action: pan-x !important;
+      /* Override defensif contre le clipping natif Instagram : on
+         force overflow: visible pour tenter de deboucher les boutons
+         d'action du reel qui sont parfois caches derriere une "bande
+         noire" a cause d'un max-width/overflow hidden applique par
+         Instagram sur le conteneur du reel modal. */
+      overflow: visible !important;
     }
 
     body.authentique-reel-locked *:not(video):not(input):not(textarea) {
@@ -540,22 +557,32 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }
       }
 
-      // Regex qui reconnait un compteur de likes Instagram dans un
-      // span feuille. Couvre les patterns "1 074 J'aime", "1074 likes",
-      // "1,3 k mentions J'aime", "1.2M likes", "aimé par X et Y autres
-      // personnes". Le texte doit etre compact (pas de phrase) : on
-      // impose une longueur maximum de 40 caracteres et on exige que
-      // le span soit une feuille (pas d'enfants).
-      var LIKE_COUNT_REGEX = /^\s*(\d[\d.,\u00A0\s]*\s*(K|M|k|m)?\s*)?(mentions?\s*)?(J['’]aime|likes?|Likes?|aimé\s*par)/;
+      // Regex qui reconnait un compteur de likes Instagram sur un span
+      // feuille. On impose DEUX choses pour eviter les faux positifs :
+      //
+      //  1. Le texte doit commencer par un CHIFFRE (donc "J'aime bien"
+      //     ne matche pas, seul "1 074 J'aime" peut matcher).
+      //  2. Le texte doit se terminer EXACTEMENT par "J'aime" / "likes"
+      //     / "Likes" / "K"/"M" isole (pour les reels counts compacts
+      //     comme "14,9 k"). L'ancre end-of-string garantit qu'il n'y
+      //     a rien apres — donc "1 074 J'aime bien ca" ne matche pas
+      //     non plus (la phrase a du texte apres le pattern).
+      //
+      // Le second regex capture "Aime par X" / "Aimes par X" (la phrase
+      // "Aime par 1 200 personnes" sous un post) avec un pattern
+      // separe parce que cette forme ne commence pas par un chiffre.
+      var LIKE_COUNT_WITH_NUMBER_REGEX = /^\s*\d[\d.,\u00A0\s]*\s*(K|M|k|m)?\s*(mentions?\s+)?(J['’]aime|likes?|Likes?)\s*$/;
+      var LIKE_COUNT_PURE_NUMBER_REGEX = /^\s*\d[\d.,\u00A0\s]*\s*(K|M|k|m)\s*$/;
+      var LIKE_COUNT_AIMES_PAR_REGEX = /^\s*Aim[eé]s?\s+par\s+\S/;
 
       function scanLikeCounts() {
-        // Le masquage reel est fait par CSS (body.authentique-hide-likes-enabled
-        // .authentique-hide-likes). Ici on se contente de TAGGER les
-        // spans qui ressemblent a des compteurs de likes, que la pref
-        // soit active ou non. Tagger tout le temps permet au toggle
-        // d'etre instantane : quand tu actives la pref, la classe CSS
-        // s'applique immediatement aux elements deja tagges sans avoir
-        // a re-scanner.
+        // Skip entierement si la pref est OFF. Ca evite une iteration
+        // sur tous les spans du document qui a du cout non-negligeable
+        // sur les longues pages Instagram. Quand la pref passe de OFF
+        // a ON, fullScan est declenche via __authentiqueUpdatePrefs et
+        // tagge a ce moment-la.
+        if (!prefs.hideLikeCounts) { return; }
+
         var spans = document.querySelectorAll('span');
         for (var i = 0; i < spans.length; i++) {
           var el = spans[i];
@@ -563,7 +590,9 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           if (el.children && el.children.length > 0) { continue; }
           var t = (el.textContent || '').trim();
           if (!t || t.length > 40) { continue; }
-          if (LIKE_COUNT_REGEX.test(t)) {
+          if (LIKE_COUNT_WITH_NUMBER_REGEX.test(t) ||
+              LIKE_COUNT_PURE_NUMBER_REGEX.test(t) ||
+              LIKE_COUNT_AIMES_PAR_REGEX.test(t)) {
             el.classList.add('authentique-hide-likes');
           }
         }
@@ -1172,25 +1201,36 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         post({ type: 'ready', platform: 'instagram' });
       }
 
-      // Trailing debounce : on attend que TOUTES les mutations s'arretent
-      // depuis 200ms avant de relancer un scan. Le comportement precedent
-      // (rAF leading edge) relancait un scan toutes les ~16ms pendant un
-      // scroll actif, ce qui bloquait le main thread et rendait le
-      // scrolling saccade. Avec un trailing debounce :
-      //  - pendant un scroll rapide, zero scan (les mutations arrivent
-      //    en continu, le timer est reset a chaque fois)
-      //  - des que le scroll s'arrete, un scan unique est declenche
-      //  - pour des mutations isolees (hors scroll), delai de 200ms
-      //    avant le scan — imperceptible, le filtrage ne "clignote" pas
+      // Scheduler : leading-edge avec throttle a 300ms minimum entre
+      // scans. Garantit que fullScan() ne tourne JAMAIS plus d'une fois
+      // tous les 300ms, quelle que soit la frequence des mutations
+      // qu'Instagram declenche pendant un scroll.
+      //
+      // Historique des versions :
+      //  - rAF leading (~16ms) : relancait un scan a presque chaque
+      //    frame pendant un scroll, saturait le main thread.
+      //  - trailing debounce 200ms : meilleur, mais les mutations
+      //    continues (typing indicator, timers Instagram) pouvaient
+      //    empecher tout scan de se declencher, ou au contraire
+      //    clignoter au moindre break de mutation.
+      //  - version actuelle (leading + throttle 300ms) : premier
+      //    mutation = scan immediat (avec un petit delai de 50ms pour
+      //    batcher les mutations d'une meme frame), puis ignore toutes
+      //    les mutations suivantes pendant 300ms. C'est le compromis
+      //    classique throttle qu'utilisent la plupart des libs.
       var scanTimer = null;
+      var lastScanEndTime = 0;
+      var SCAN_MIN_INTERVAL = 300;
       function scheduleScan() {
-        if (scanTimer) {
-          clearTimeout(scanTimer);
-        }
+        if (scanTimer) { return; }
+        var now = Date.now();
+        var elapsed = now - lastScanEndTime;
+        var delay = elapsed >= SCAN_MIN_INTERVAL ? 50 : (SCAN_MIN_INTERVAL - elapsed);
         scanTimer = setTimeout(function() {
           scanTimer = null;
           fullScan();
-        }, 200);
+          lastScanEndTime = Date.now();
+        }, delay);
       }
 
       if (document.body) {
