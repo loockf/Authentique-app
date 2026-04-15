@@ -16,17 +16,86 @@ import type { FilterBundle, FilterPreferences } from './types';
  * Le script est volontairement verbeux et lisible — il doit pouvoir être audité
  * par n'importe qui qui lit le repo.
  *
- * Nouveautés :
- *  - `window.__authentiqueUpdatePrefs(newPrefs)` pour propager les toggles
- *    des Paramètres vers la WebView à chaud, sans recharger la page.
- *  - Recherche de "Sponsorisé" dans les attributs `aria-label`/`alt` en plus
- *    du texte visible, pour capturer les posts dont le marqueur est caché.
- *  - Suppression du remonté vers `role="presentation"` qui masquait des
- *    conteneurs trop gros et causait des blancs en bas de feed.
- *  - Fermeture agressive du bandeau "Ouvrir dans l'application" par matching
- *    textuel sur toutes ses variantes FR+EN.
- *  - Basculement automatique "Pour vous" → "Abonnements" au premier scan.
+ * -----------------------------------------------------------------------------
+ * REFACTOR EN 3 COMMITS EN COURS
+ * -----------------------------------------------------------------------------
+ * Ce fichier est en train d'etre refondu en 3 commits successifs pour ajouter
+ * plusieurs features lourdes (fix feed blanc, filtre Explore, Reels option B,
+ * lock Reels DMs, masquage canaux suggeres DMs) sans risquer un timeout sur
+ * une reecriture unique.
+ *
+ *   Commit 1 (celui-ci) — Structure : extraction des listes de "needles"
+ *   (textes a matcher) hors du JS inline vers des constantes TypeScript
+ *   typees au niveau module. Pas de changement comportemental, mais les
+ *   commits 2 et 3 pourront augmenter ces tableaux proprement au lieu de
+ *   fouiller dans un string JS.
+ *
+ *   Commit 2 — Filtres CSS : nouvelles classes .authentique-hidden-flow
+ *   (pour preserver le lazy-load), repositionnement de l'overlay Reels,
+ *   styles du filtre Explore et du lock Reels DMs.
+ *
+ *   Commit 3 — Filtres JS + logique Reels : helper hideInFlow(), route
+ *   detection enrichie (Explore, DMs, reel individuel), scans explore,
+ *   lock swipe vertical sur reel individuel, et filtre des canaux
+ *   suggeres dans la messagerie.
+ * -----------------------------------------------------------------------------
  */
+
+/**
+ * Listes de textes a matcher dans le DOM pour identifier les elements a
+ * masquer. On les pose ici, au niveau module et typees en TypeScript, pour
+ * deux raisons :
+ *
+ *  - Elles sont lisibles et auditables d'un coup d'oeil, sans plonger dans
+ *    le corps du script JS inline.
+ *  - Les prochains commits pourront en ajouter / retirer en editant une
+ *    seule liste sans toucher a la logique de scan.
+ *
+ * Les tableaux sont serialises en JSON avant d'etre interpoles dans le
+ * template literal du script JS : aucune fuite d'echappement ou de
+ * caractere special a gerer a la main.
+ */
+const SPONSORED_NEEDLES = [
+  'Sponsorisé',
+  'Sponsorisée',
+  'Sponsored',
+  'Partenariat rémunéré',
+  'Paid partnership',
+] as const;
+
+const SUGGESTED_NEEDLES = [
+  'Suggestions pour vous',
+  'Suggested for you',
+  'Suggested posts',
+  'Publications suggérées',
+  'Suggéré pour vous',
+] as const;
+
+const REELS_NEEDLES = [
+  'Reels et plus',
+  'Reels and more',
+  'Reels suggérés',
+  'Suggested reels',
+] as const;
+
+const OPEN_APP_NEEDLES = [
+  "Ouvrir dans l'application",
+  "Ouvrir l'application",
+  "Ouvrir Instagram",
+  "Voir dans l'application",
+  "Continuer dans l'application",
+  "Utiliser l'application",
+  'Open in app',
+  'Open Instagram app',
+  'Open Instagram',
+  'See in app',
+  'Continue in app',
+  'Use the app',
+  'Get the app',
+] as const;
+
+const FOLLOW_NEEDLES = ['Suivre', 'Follow'] as const;
+
 export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
   const css = `
     /* Pop-ups "Ouvrir dans l'application" / "Installer l'app" */
@@ -197,43 +266,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       // --- Règles ----------------------------------------------------------
-
-      var SPONSORED_NEEDLES = [
-        'Sponsorisé',
-        'Sponsorisée',
-        'Sponsored',
-        'Partenariat rémunéré',
-        'Paid partnership',
-      ];
-      var SUGGESTED_NEEDLES = [
-        'Suggestions pour vous',
-        'Suggested for you',
-        'Suggested posts',
-        'Publications suggérées',
-        'Suggéré pour vous',
-      ];
-      var REELS_NEEDLES = [
-        'Reels et plus',
-        'Reels and more',
-        'Reels suggérés',
-        'Suggested reels',
-      ];
-      var OPEN_APP_NEEDLES = [
-        "Ouvrir dans l'application",
-        "Ouvrir l'application",
-        "Ouvrir Instagram",
-        "Voir dans l'application",
-        "Continuer dans l'application",
-        "Utiliser l'application",
-        "Open in app",
-        "Open Instagram app",
-        "Open Instagram",
-        "See in app",
-        "Continue in app",
-        "Use the app",
-        "Get the app",
-      ];
-      var FOLLOW_NEEDLES = ['Suivre', 'Follow'];
+      // Les needles viennent des constantes typees au niveau module de
+      // instagram.ts, serialisees en JSON avant injection. C'est la que se
+      // passe le pont entre le code TypeScript et le script JS qui tourne
+      // dans le WebView : modifier une needle = editer le tableau TS en
+      // haut du fichier, pas ce bloc.
+      var SPONSORED_NEEDLES = ${JSON.stringify(SPONSORED_NEEDLES)};
+      var SUGGESTED_NEEDLES = ${JSON.stringify(SUGGESTED_NEEDLES)};
+      var REELS_NEEDLES = ${JSON.stringify(REELS_NEEDLES)};
+      var OPEN_APP_NEEDLES = ${JSON.stringify(OPEN_APP_NEEDLES)};
+      var FOLLOW_NEEDLES = ${JSON.stringify(FOLLOW_NEEDLES)};
 
       /**
        * Scan global — on cherche à chaque fois dans tout le document, pas
