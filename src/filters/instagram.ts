@@ -1294,9 +1294,18 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           if (!ptrArmed) { return; }
           if (!e.touches || e.touches.length !== 1) { return; }
           var dy = e.touches[0].clientY - ptrStartY;
-          // Finger moving DOWN the screen = user pulling down = the
-          // pull-to-refresh gesture. Finger moving UP = normal scroll,
-          // laisse passer.
+          // Des que le doigt part vers le HAUT de l'ecran, c'est que
+          // l'utilisateur scrolle (il veut voir du contenu plus bas
+          // dans la grille de resultats). On desarme pour TOUT le
+          // reste du geste afin de ne pas interferer meme s'il fait
+          // ensuite un leger mouvement descendant — le scroll natif
+          // doit pouvoir gerer librement.
+          if (dy < 0) {
+            ptrArmed = false;
+            return;
+          }
+          // Sinon, doigt qui va vers le BAS de l'ecran = geste de
+          // pull-to-refresh. On bloque.
           if (dy > 0) {
             try { e.preventDefault(); } catch (err) {}
           }
