@@ -61,7 +61,7 @@ export function SettingsScreen() {
                 <Text style={styles.rowDescription}>{toggle.description}</Text>
               </View>
               <Switch
-                value={prefs[toggle.key]}
+                value={Boolean(prefs[toggle.key])}
                 onValueChange={(value) => setPref(toggle.key, value)}
                 trackColor={{ false: colors.border, true: colors.accent }}
                 thumbColor={colors.surface}

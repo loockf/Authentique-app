@@ -22,7 +22,6 @@ export function FacebookScreen() {
         <FilteredWebView
           uri="https://m.facebook.com/friends"
           filters={filters}
-          platform="facebook"
         />
         <HiddenBadge count={hiddenCount} />
       </View>

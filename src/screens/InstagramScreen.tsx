@@ -23,7 +23,6 @@ export function InstagramScreen() {
         <FilteredWebView
           uri="https://www.instagram.com/"
           filters={filters}
-          platform="instagram"
         />
         <HiddenBadge count={hiddenCount} />
       </View>

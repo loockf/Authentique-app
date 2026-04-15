@@ -26,8 +26,6 @@ export type FilteredWebViewProps = {
   uri: string;
   /** Bundle CSS + JS à injecter. */
   filters: FilterBundle;
-  /** Identifiant de la plateforme, utilisé pour les logs uniquement. */
-  platform: 'instagram' | 'facebook';
 };
 
 /**
@@ -62,7 +60,7 @@ function buildInstallScript(bundle: FilterBundle): string {
   `;
 }
 
-export function FilteredWebView({ uri, filters, platform }: FilteredWebViewProps) {
+export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
   const { bumpHiddenCount } = useFilters();
   const webviewRef = useRef<WebView>(null);
 
@@ -98,11 +96,10 @@ export function FilteredWebView({ uri, filters, platform }: FilteredWebViewProps
         ref={webviewRef}
         source={{ uri }}
         userAgent={IOS_SAFARI_UA}
-        applicationNameForUserAgent={undefined}
         // --- Session persistante -----------------------------------------
-        sharedCookiesEnabled
-        thirdPartyCookiesEnabled
-        cacheEnabled
+        sharedCookiesEnabled={true}
+        thirdPartyCookiesEnabled={true}
+        cacheEnabled={true}
         incognito={false}
         // --- Injection ---------------------------------------------------
         injectedJavaScriptBeforeContentLoaded={installScript}
@@ -110,17 +107,10 @@ export function FilteredWebView({ uri, filters, platform }: FilteredWebViewProps
         onLoadStart={handleLoadStart}
         onMessage={handleMessage}
         // --- UX ----------------------------------------------------------
-        allowsBackForwardNavigationGestures
-        decelerationRate="normal"
-        // Ne pas ouvrir les liens externes dans un navigateur séparé tant
-        // qu'on reste sur le domaine ; les liens vers d'autres domaines
-        // sont gérés par le comportement par défaut (ouverture native).
-        originWhitelist={['https://*', 'http://*']}
-        // --- Suppressions bruyantes --------------------------------------
-        allowsInlineMediaPlayback
+        allowsBackForwardNavigationGestures={true}
+        // --- Autoplay éventuel (stories, reels) --------------------------
+        allowsInlineMediaPlayback={true}
         mediaPlaybackRequiresUserAction={false}
-        // Nom technique transmis en prop pour les outils de debug.
-        testID={`webview-${platform}`}
       />
     </View>
   );
