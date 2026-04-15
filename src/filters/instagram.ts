@@ -134,16 +134,15 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        instantane meme apres un changement de preference (pas besoin
        de re-injecter de CSS).
 
-       Les selecteurs couvrent plusieurs layouts d'Instagram :
-         - home feed : link <a href*="liked_by">
-         - home feed moderne : span dans button[aria-label*="aime"]
-         - reels fullscreen : span sous le bouton heart
+       Le taggage de .authentique-hide-likes sur des elements cibles est
+       fait par scanLikeCounts() en JS via une regex qui reconnait les
+       patterns "1 074 J'aime", "1074 likes", etc. sur les spans feuilles.
+       La raison : les selecteurs CSS purs (aria-label, href*="liked_by")
+       ne captaient qu'une partie des cas sur Instagram mobile web
+       moderne, qui place souvent le compteur dans un span sibling du
+       bouton heart et non descendant.
     */
     body.authentique-hide-likes-enabled a[href*="liked_by"],
-    body.authentique-hide-likes-enabled button[aria-label*="aime" i] span,
-    body.authentique-hide-likes-enabled button[aria-label*="Like" i] span,
-    body.authentique-hide-likes-enabled [role="button"][aria-label*="aime" i] span,
-    body.authentique-hide-likes-enabled [role="button"][aria-label*="Like" i] span,
     body.authentique-hide-likes-enabled .authentique-hide-likes {
       visibility: hidden !important;
     }
@@ -154,10 +153,27 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        Meme principe : regle toujours presente, activee via la body
        class .authentique-focus-mode posee par le JS. On attenue les
        icones d'action (like, comment, share, save) pour qu'elles
-       s'effacent visuellement, tout en restant cliquables.
+       s'effacent visuellement tout en restant cliquables.
+
+       Selecteurs directs sur aria-label plutot que sur section[role=group]
+       qui n'est plus utilise de maniere fiable par Instagram mobile web.
     */
-    body.authentique-focus-mode section[role="group"] svg,
-    body.authentique-focus-mode section[role="group"] button {
+    body.authentique-focus-mode button[aria-label*="aime" i],
+    body.authentique-focus-mode button[aria-label*="Like" i],
+    body.authentique-focus-mode button[aria-label*="Commenter" i],
+    body.authentique-focus-mode button[aria-label*="Comment" i],
+    body.authentique-focus-mode button[aria-label*="Partager" i],
+    body.authentique-focus-mode button[aria-label*="Share" i],
+    body.authentique-focus-mode button[aria-label*="Enregistrer" i],
+    body.authentique-focus-mode button[aria-label*="Save" i],
+    body.authentique-focus-mode [role="button"][aria-label*="aime" i],
+    body.authentique-focus-mode [role="button"][aria-label*="Like" i],
+    body.authentique-focus-mode [role="button"][aria-label*="Commenter" i],
+    body.authentique-focus-mode [role="button"][aria-label*="Comment" i],
+    body.authentique-focus-mode [role="button"][aria-label*="Partager" i],
+    body.authentique-focus-mode [role="button"][aria-label*="Share" i],
+    body.authentique-focus-mode [role="button"][aria-label*="Enregistrer" i],
+    body.authentique-focus-mode [role="button"][aria-label*="Save" i] {
       opacity: 0.25 !important;
     }
 
@@ -254,27 +270,29 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        Dans les deux cas, l'utilisateur doit pouvoir regarder le Reel
        et le fermer, pas glisser dans le fil algorithmique qui suit.
 
-       Le lock combine deux mecanismes :
-         - overflow: hidden pour tuer le scroll container qui anime
-           la snap-pagination Instagram entre Reels successifs.
+       Le lock combine deux mecanismes *sans* toucher a l'overflow :
          - touch-action: pan-x pour empecher Safari iOS d'interpreter
-           un swipe vertical, meme si Instagram ecoute touchmove
-           manuellement par-dessus.
-       Les taps (play/pause, like) et les gestes horizontaux restent
-       actifs parce qu'on n'a bloque QUE le panning vertical.
+           un swipe vertical au niveau natif.
+         - overscroll-behavior: none pour eviter les effets de rebond
+           qui pourraient contourner le lock.
+         - Un handler touchmove en JS qui preventDefault tout pan
+           vertical quand la classe est active (voir
+           syncReelLockTouchHandler — attache dynamiquement pour ne
+           pas polluer les scrolls normaux).
+
+       Historique : un commit precedent ajoutait aussi overflow: hidden
+       sur body/main/[role="main"]. Probleme : ca clippait horizontalement
+       le layout Instagram des Reels, dont les boutons d'action (heart,
+       comment, share) debordent legerement a droite du viewport. Les
+       boutons se retrouvaient caches derriere une "bande noire". Retire.
        ----------------------------------------------------------------- */
     body.authentique-reel-locked,
     body.authentique-reel-locked main,
     body.authentique-reel-locked [role="main"] {
-      overflow: hidden !important;
       overscroll-behavior: none !important;
       touch-action: pan-x !important;
     }
 
-    /* Strictement, on ferme l'overflow vertical sur TOUS les descendants
-       quand le lock est actif, pas seulement body/main, parce que
-       Instagram utilise souvent un scroll container intermediaire qui
-       n'est ni body ni main et qui bypasse l'overflow des ancetres. */
     body.authentique-reel-locked *:not(video):not(input):not(textarea) {
       overscroll-behavior: none !important;
       touch-action: pan-x !important;
@@ -522,14 +540,33 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }
       }
 
+      // Regex qui reconnait un compteur de likes Instagram dans un
+      // span feuille. Couvre les patterns "1 074 J'aime", "1074 likes",
+      // "1,3 k mentions J'aime", "1.2M likes", "aimé par X et Y autres
+      // personnes". Le texte doit etre compact (pas de phrase) : on
+      // impose une longueur maximum de 40 caracteres et on exige que
+      // le span soit une feuille (pas d'enfants).
+      var LIKE_COUNT_REGEX = /^\s*(\d[\d.,\u00A0\s]*\s*(K|M|k|m)?\s*)?(mentions?\s*)?(J['’]aime|likes?|Likes?|aimé\s*par)/;
+
       function scanLikeCounts() {
-        // Le masquage des compteurs de likes est desormais entierement
-        // assure par les regles CSS sous body.authentique-hide-likes-enabled,
-        // posee dans updateRouteMarker() a chaque fullScan en fonction
-        // de prefs.hideLikeCounts. Plus besoin de scanner et tagger les
-        // elements un par un. Cette fonction reste en place pour faire
-        // un no-op propre — on evite de toucher fullScan() et de risquer
-        // de casser le pipeline.
+        // Le masquage reel est fait par CSS (body.authentique-hide-likes-enabled
+        // .authentique-hide-likes). Ici on se contente de TAGGER les
+        // spans qui ressemblent a des compteurs de likes, que la pref
+        // soit active ou non. Tagger tout le temps permet au toggle
+        // d'etre instantane : quand tu actives la pref, la classe CSS
+        // s'applique immediatement aux elements deja tagges sans avoir
+        // a re-scanner.
+        var spans = document.querySelectorAll('span');
+        for (var i = 0; i < spans.length; i++) {
+          var el = spans[i];
+          if (el.classList.contains('authentique-hide-likes')) { continue; }
+          if (el.children && el.children.length > 0) { continue; }
+          var t = (el.textContent || '').trim();
+          if (!t || t.length > 40) { continue; }
+          if (LIKE_COUNT_REGEX.test(t)) {
+            el.classList.add('authentique-hide-likes');
+          }
+        }
       }
 
       /**
@@ -629,6 +666,10 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // l'utilisateur de glisser dans le fil algorithmique Reels.
         var shouldLock = isIndividualReelRoute() || isDMReelOverlayOpen();
         document.body.classList.toggle('authentique-reel-locked', shouldLock);
+        // Attache/detache dynamiquement le touchmove handler qui
+        // bloque les swipes verticaux — presence a meme d'eviter
+        // l'overhead d'un listener touchmove sur chaque scroll normal.
+        syncReelLockTouchHandler(shouldLock);
 
         // Etat vide de la loupe Instagram : pose uniquement quand on
         // est sur /explore/ sans recherche active. La classe est lue
@@ -795,25 +836,25 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       function scanReelsFullscreen() {
-        // Seulement sur le fil /reels/ (algorithmique), pas sur /reel/:id
-        // (un Reel individuel qu'on traite via le lock swipe vertical).
-        if (!isReelsFeedRoute()) { return; }
-        var videos = document.querySelectorAll('video');
-        for (var i = 0; i < videos.length; i++) {
-          var v = videos[i];
-          // Eviter les miniatures (cards deja scrollees hors-viewport ou
-          // previews de bandes sonores) : on n'adresse que les videos
-          // substantielles.
-          if (v.offsetHeight < 200) { continue; }
-          var card = findReelCardFromVideo(v);
-          if (!card) { continue; }
-          if (card.classList.contains('authentique-hidden')) { continue; }
-          if (cardHasFollowButton(card)) {
-            // Pour les Reels on veut que le swipe avance au suivant, donc
-            // on utilise hide() (display:none) et pas hideInFlow().
-            hide(card, 'reel-non-ami');
-          }
-        }
+        // ---------------------------------------------------------------
+        // DESACTIVE TEMPORAIREMENT
+        // ---------------------------------------------------------------
+        // Le filtrage contextuel des Reels par detection du bouton Suivre
+        // etait instable : soit il masquait tout (y compris les Reels
+        // d'amis, a cause de faux positifs dans des suggestions widgets
+        // imbriques), soit il laissait tout passer (quand la position
+        // du Follow button ne matchait pas l'heuristique). Sans intel
+        // DOM plus fine et stable, on prefere ne rien masquer du tout
+        // plutot que de casser l'onglet Reels.
+        //
+        // A reprendre quand on aura soit un nouveau heuristique DOM
+        // fiable, soit une toggle explicite dans Parametres pour que
+        // l'utilisateur decide s'il veut activer ce filtre experimental.
+        //
+        // Les autres filtres Reels (scanReels pour les sections Reels
+        // dans le home feed, scanSponsored pour les publicites) restent
+        // actifs et non affectes par cette desactivation.
+        return;
       }
 
       // --- Filtre Explore (loupe Instagram) ------------------------------
@@ -898,12 +939,25 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       function scanDirectSuggestions() {
         if (!isDirectRoute()) { return; }
         if (!prefs.hideSuggestions) { return; }
-        var headings = document.querySelectorAll('h2, h3, h4, span');
+
+        // On NE scanne PAS quand on est dans un thread de conversation
+        // (/direct/t/<thread_id>/). A l'interieur d'un thread, il n'y
+        // a aucun canal suggere a masquer, et scanner les messages est
+        // une mauvaise idee pour deux raisons : (1) ca ralentit Instagram
+        // a chaque mutation (typing indicator, nouveau message), et (2)
+        // un match accidentel peut hide le contenu d'un message et
+        // laisser des bulles vides (on l'a vu en production avec le
+        // pattern span-based).
+        var p = location.pathname || '';
+        if (p.indexOf('/direct/t/') === 0) { return; }
+
+        // Selecteur restreint aux vrais headings. L'ancienne version
+        // incluait 'span' ce qui faisait matcher n'importe quel span
+        // avec un texte court, y compris le contenu de certains
+        // messages — bug qui laissait les bulles vides.
+        var headings = document.querySelectorAll('h2, h3, h4, [role="heading"]');
         for (var i = 0; i < headings.length; i++) {
           var h = headings[i];
-          // On ne prend que les noeuds dont TOUT le textContent correspond
-          // exactement a une needle (pas de match partiel dans un gros
-          // paragraphe), et seulement s'ils n'ont pas trop d'enfants.
           if (h.children && h.children.length > 1) { continue; }
           var t = (h.textContent || '').trim();
           if (!t || t.length > 40) { continue; }
@@ -1044,37 +1098,61 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        * Les taps purs (delta < 6) passent toujours pour que le
        * play/pause du video fonctionne.
        */
+      //
+      // Handler touchmove attache DYNAMIQUEMENT via syncReelLockTouchHandler.
+      //
+      // Historique : on l'attachait en permanence au demarrage, avec un
+      // check .contains('authentique-reel-locked') a chaque event. Ca
+      // marche, mais touchmove est un event tres bruyant (60+ par seconde
+      // pendant un scroll). Meme un check trivial qui ne fait rien,
+      // multiplie par 60+ events/s, contribue au jank du scroll principal.
+      //
+      // La version attachee dynamiquement retire completement le listener
+      // quand on n'est pas dans un contexte reel-locked — zero overhead
+      // sur le scroll normal. On le reattache quand updateRouteMarker()
+      // detecte qu'on vient d'entrer dans /reel/:id ou dans un DM reel
+      // modal.
       var _touchStartX = 0;
       var _touchStartY = 0;
-      function installReelLockTouchHandlers() {
-        document.addEventListener('touchstart', function(e) {
-          if (e.touches && e.touches.length === 1) {
-            _touchStartX = e.touches[0].clientX;
-            _touchStartY = e.touches[0].clientY;
-          }
-        }, { passive: true });
+      var _reelLockHandlerAttached = false;
 
-        document.addEventListener('touchmove', function(e) {
-          if (!document.body || !document.body.classList.contains('authentique-reel-locked')) {
-            return;
-          }
-          if (!e.touches || e.touches.length !== 1) { return; }
-          var dx = e.touches[0].clientX - _touchStartX;
-          var dy = e.touches[0].clientY - _touchStartY;
-          // On bloque le mouvement s'il est majoritairement vertical
-          // et depasse un seuil qui elimine les micro-mouvements.
-          if (Math.abs(dy) > 6 && Math.abs(dy) > Math.abs(dx)) {
-            try { e.preventDefault(); } catch (err) {}
-          }
-        }, { passive: false });
+      function _onReelTouchStart(e) {
+        if (e.touches && e.touches.length === 1) {
+          _touchStartX = e.touches[0].clientX;
+          _touchStartY = e.touches[0].clientY;
+        }
+      }
+
+      function _onReelTouchMove(e) {
+        if (!e.touches || e.touches.length !== 1) { return; }
+        var dx = e.touches[0].clientX - _touchStartX;
+        var dy = e.touches[0].clientY - _touchStartY;
+        // On bloque le mouvement s'il est majoritairement vertical
+        // et depasse un seuil qui elimine les micro-mouvements.
+        if (Math.abs(dy) > 6 && Math.abs(dy) > Math.abs(dx)) {
+          try { e.preventDefault(); } catch (err) {}
+        }
+      }
+
+      function syncReelLockTouchHandler(shouldBeAttached) {
+        if (shouldBeAttached && !_reelLockHandlerAttached) {
+          document.addEventListener('touchstart', _onReelTouchStart, { passive: true });
+          document.addEventListener('touchmove', _onReelTouchMove, { passive: false });
+          _reelLockHandlerAttached = true;
+        } else if (!shouldBeAttached && _reelLockHandlerAttached) {
+          document.removeEventListener('touchstart', _onReelTouchStart);
+          document.removeEventListener('touchmove', _onReelTouchMove);
+          _reelLockHandlerAttached = false;
+        }
       }
 
       function start() {
         injectReelsWaitingOverlay();
         injectExploreEmptyState();
-        installReelLockTouchHandlers();
         // Premier full scan : updateRouteMarker + tous les scanners
         // (sponsored, suggestions, reels, explore, DM, etc.).
+        // updateRouteMarker appelera syncReelLockTouchHandler en fonction
+        // de la route, on n'a plus besoin d'un install initial.
         fullScan();
 
         var observer = new MutationObserver(function(mutations) {
@@ -1094,22 +1172,25 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         post({ type: 'ready', platform: 'instagram' });
       }
 
-      var scanScheduled = false;
+      // Trailing debounce : on attend que TOUTES les mutations s'arretent
+      // depuis 200ms avant de relancer un scan. Le comportement precedent
+      // (rAF leading edge) relancait un scan toutes les ~16ms pendant un
+      // scroll actif, ce qui bloquait le main thread et rendait le
+      // scrolling saccade. Avec un trailing debounce :
+      //  - pendant un scroll rapide, zero scan (les mutations arrivent
+      //    en continu, le timer est reset a chaque fois)
+      //  - des que le scroll s'arrete, un scan unique est declenche
+      //  - pour des mutations isolees (hors scroll), delai de 200ms
+      //    avant le scan — imperceptible, le filtrage ne "clignote" pas
+      var scanTimer = null;
       function scheduleScan() {
-        if (scanScheduled) { return; }
-        scanScheduled = true;
-        // requestAnimationFrame pour batcher les mutations d'un même frame
-        if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(function() {
-            scanScheduled = false;
-            fullScan();
-          });
-        } else {
-          setTimeout(function() {
-            scanScheduled = false;
-            fullScan();
-          }, 16);
+        if (scanTimer) {
+          clearTimeout(scanTimer);
         }
+        scanTimer = setTimeout(function() {
+          scanTimer = null;
+          fullScan();
+        }, 200);
       }
 
       if (document.body) {
