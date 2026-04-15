@@ -42,16 +42,6 @@ const TOGGLES: Toggle[] = [
     description: 'Vidéos courtes de comptes que vous ne suivez pas',
   },
   {
-    key: 'hideLikeCounts',
-    label: 'Masquer les compteurs de likes',
-    description: 'Pour une lecture plus calme, sans scores',
-  },
-  {
-    key: 'focusMode',
-    label: 'Mode Focus',
-    description: 'Atténue les boutons d\'action pour ne laisser que le contenu',
-  },
-  {
     key: 'navSnapToEdge',
     label: 'Aimanter le bouton',
     description: 'Le bouton flottant glisse vers le bord le plus proche après un drag',

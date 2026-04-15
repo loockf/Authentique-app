@@ -14,10 +14,6 @@ export type FilterPreferences = {
   hideSuggestions: boolean;
   /** Masquer les Reels / vidéos de comptes non suivis. */
   hideReels: boolean;
-  /** Masquer les compteurs de likes et de commentaires. */
-  hideLikeCounts: boolean;
-  /** Mode Focus : ne garder que texte et photos, masquer tout le reste. */
-  focusMode: boolean;
   /** Le bouton flottant s'aimante au bord gauche/droit apres un drag. */
   navSnapToEdge: boolean;
 };
@@ -26,8 +22,6 @@ export const defaultPreferences: FilterPreferences = {
   hideAds: true,
   hideSuggestions: true,
   hideReels: true,
-  hideLikeCounts: false,
-  focusMode: false,
   navSnapToEdge: true,
 };
 

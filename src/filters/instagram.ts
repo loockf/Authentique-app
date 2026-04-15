@@ -142,70 +142,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       display: none !important;
     }
 
-    /* -----------------------------------------------------------------
-       Masquage des compteurs de likes
-       -----------------------------------------------------------------
-       Multi-strategy : on combine selecteurs CSS directs (liens liked_by,
-       aria-label commençant par "Aim"/"Liked") ET tagging JS via regex
-       sur le textContent, parce qu'aucune approche seule ne couvre tous
-       les patterns Instagram modernes.
-
-       Le body class .authentique-hide-likes-enabled est pose par
-       updateRouteMarker quand prefs.hideLikeCounts est true.
-    */
-    body.authentique-hide-likes-enabled a[href*="liked_by"],
-    body.authentique-hide-likes-enabled a[href*="liked_by"] *,
-    body.authentique-hide-likes-enabled [aria-label^="Aim" i],
-    body.authentique-hide-likes-enabled [aria-label^="Liked" i],
-    body.authentique-hide-likes-enabled [aria-label^="Voir les personnes qui aiment" i],
-    body.authentique-hide-likes-enabled [aria-label^="See people who liked" i],
-    body.authentique-hide-likes-enabled .authentique-hide-likes {
-      visibility: hidden !important;
-    }
-
-    /* -----------------------------------------------------------------
-       Mode Focus
-       -----------------------------------------------------------------
-       Strategie nuclear : on utilise [aria-label^="..." i] (start-of-string,
-       case-insensitive) directement en CSS, + le tagging JS via regex
-       comme backup. L'operateur ^= matche "J'aime" ET "J'aime ce post"
-       ET "J'aime cette publication" sans toucher a "J'aimerais" (qui ne
-       commence pas par "J'aime" + separateur).
-
-       Liste explicite des prefixes d'aria-label Instagram connus.
-    */
-    body.authentique-focus-mode [aria-label^="J'aime" i],
-    body.authentique-focus-mode [aria-label^="J’aime" i],
-    body.authentique-focus-mode [aria-label^="Je n'aime plus" i],
-    body.authentique-focus-mode [aria-label^="Je n’aime plus" i],
-    body.authentique-focus-mode [aria-label^="Like" i],
-    body.authentique-focus-mode [aria-label^="Unlike" i],
-    body.authentique-focus-mode [aria-label^="Commenter" i],
-    body.authentique-focus-mode [aria-label^="Comment" i],
-    body.authentique-focus-mode [aria-label^="Partager" i],
-    body.authentique-focus-mode [aria-label^="Envoyer" i],
-    body.authentique-focus-mode [aria-label^="Share" i],
-    body.authentique-focus-mode [aria-label^="Send" i],
-    body.authentique-focus-mode [aria-label^="Enregistrer" i],
-    body.authentique-focus-mode [aria-label^="Ne plus enregistrer" i],
-    body.authentique-focus-mode [aria-label^="Save" i],
-    body.authentique-focus-mode [aria-label^="Bookmark" i],
-    body.authentique-focus-mode .authentique-action-btn {
-      opacity: 0.25 !important;
-    }
-    /* Si l'icone est un svg dedans, on attenue aussi pour la specificite */
-    body.authentique-focus-mode [aria-label^="J'aime" i] svg,
-    body.authentique-focus-mode [aria-label^="Like" i] svg,
-    body.authentique-focus-mode [aria-label^="Commenter" i] svg,
-    body.authentique-focus-mode [aria-label^="Comment" i] svg,
-    body.authentique-focus-mode [aria-label^="Partager" i] svg,
-    body.authentique-focus-mode [aria-label^="Share" i] svg,
-    body.authentique-focus-mode [aria-label^="Envoyer" i] svg,
-    body.authentique-focus-mode [aria-label^="Send" i] svg,
-    body.authentique-focus-mode [aria-label^="Enregistrer" i] svg,
-    body.authentique-focus-mode [aria-label^="Save" i] svg {
-      opacity: 0.25 !important;
-    }
+    /* Mode Focus et Masquer compteurs de likes ont ete retires du
+       produit dans un commit de nettoyage. Les features etaient trop
+       fragiles a debugger sans acces DOM direct sur l'Instagram live,
+       et le scope du projet s'en porte mieux : on revient a un set de
+       filtres minimal et solide (sponsored, suggestions, reels du fil,
+       bandeau install, DM, Reel modal). On pourra reintroduire ces
+       deux features plus tard si besoin. */
 
     /* -----------------------------------------------------------------
        Classes universelles de masquage
@@ -610,135 +553,8 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }
       }
 
-      // Regexes qui reconnaissent les compteurs de likes Instagram sur
-      // des spans feuilles. On accepte plus de formes qu'avant parce
-      // que les selections precedentes etaient trop strictes et
-      // ratent les cas ou le compteur est juste un nombre "1 074"
-      // sans "J'aime" visible (seul le bouton heart a le label).
-      //
-      // Regexes en tableau pour pouvoir iterer proprement, avec /i
-      // (case-insensitive) pour tolerer les variantes.
-      var LIKE_COUNT_REGEXES = [
-        // "1 074 J'aime" / "1 074 likes" / "1 074 mentions J'aime"
-        /^\s*\d[\d.,\u00A0\s]*\s*(k|m)?\s*(mentions?\s+)?(j['’]aime|likes?)\s*$/i,
-        // "14,9 k" / "1.2M" — pure number compact counter
-        /^\s*\d[\d.,\u00A0\s]*\s*(k|m)\s*$/i,
-        // "Aime par X" / "Aimee par X" / "Aimes par X"
-        /^\s*aim[eé]?s?\s+par\s+\S/i,
-        // "Liked by X"
-        /^\s*liked\s+by\s+\S/i,
-        // Nombre seul court (3-10 chars) — probablement un compteur
-        // sous un bouton d'action. On reste prudent avec la longueur
-        // pour eviter de matcher des dates, des timestamps, etc.
-        /^\s*\d{1,3}(?:[\s.,\u00A0]\d{3})*\s*$/,
-      ];
-
-      function matchesLikeCountPattern(text) {
-        for (var i = 0; i < LIKE_COUNT_REGEXES.length; i++) {
-          if (LIKE_COUNT_REGEXES[i].test(text)) { return true; }
-        }
-        return false;
-      }
-
-      // --- Hide likes : direct style sur les compteurs ----------------
-      //
-      // Meme approche que Mode Focus : on maintient un Set JS des
-      // elements tagges comme "like counters" et on pose directement
-      // element.style.visibility selon la pref. Styles inline battent
-      // la specificity CSS sans discussion possible.
-      var likeCountElsSet = (typeof Set === 'function') ? new Set() : null;
-
-      function scanLikeCounts() {
-        if (!likeCountElsSet) { return; }
-        // Detecter les nouveaux spans like-count (pas deja dans le Set)
-        // quand la pref est ON. Si la pref est OFF, on skip la detection
-        // mais on iteres quand meme le Set existant pour retirer les
-        // styles inline.
-        if (prefs.hideLikeCounts) {
-          var spans = document.querySelectorAll('span');
-          for (var i = 0; i < spans.length; i++) {
-            var el = spans[i];
-            if (likeCountElsSet.has(el)) { continue; }
-            if (el.children && el.children.length > 0) { continue; }
-            var t = (el.textContent || '').trim();
-            if (!t || t.length > 40) { continue; }
-            if (matchesLikeCountPattern(t)) {
-              likeCountElsSet.add(el);
-            }
-          }
-        }
-        // Appliquer ou retirer visibility sur les elements tagges.
-        var toRemove = [];
-        likeCountElsSet.forEach(function(el) {
-          if (!document.contains || !document.contains(el)) {
-            toRemove.push(el);
-            return;
-          }
-          if (prefs.hideLikeCounts) {
-            el.style.visibility = 'hidden';
-          } else {
-            if (el.style.visibility === 'hidden') {
-              el.style.visibility = '';
-            }
-          }
-        });
-        for (var j = 0; j < toRemove.length; j++) {
-          likeCountElsSet.delete(toRemove[j]);
-        }
-      }
-
-      // --- Mode Focus : direct style sur les boutons d'action ---------
-      //
-      // Approche radicalement differente des versions precedentes :
-      // plutot que de jouer aux classes CSS et de se battre avec la
-      // specificity d'Instagram, on manipule directement element.style.
-      // Les styles inline battent TOUJOURS les regles CSS, peu importe
-      // la specificity ou le !important cote Instagram.
-      //
-      // On maintient un Set JS des elements tagges comme "action
-      // buttons". A chaque fullScan, on re-scanne les nouveaux boutons,
-      // on met a jour le Set, puis on itere le Set et on applique ou
-      // retire le style opacity: 0.25 selon prefs.focusMode.
-      //
-      // Le Set est nettoye a la volee : si un element n'est plus dans
-      // le DOM (Instagram l'a remplace par un autre), on le retire.
-      var ACTION_LABEL_REGEX = /^(j['’]aime|je n['’]aime plus|like|unlike|commenter|comment\b|partager|envoyer|share|enregistrer|ne plus enregistrer|save\b|remove|post)/i;
-      var actionButtonsSet = (typeof Set === 'function') ? new Set() : null;
-
-      function scanActionButtons() {
-        if (!actionButtonsSet) { return; }
-        // Detecte les nouveaux boutons d'action (pas deja dans le Set).
-        var buttons = document.querySelectorAll('button, [role="button"]');
-        for (var i = 0; i < buttons.length; i++) {
-          var btn = buttons[i];
-          if (actionButtonsSet.has(btn)) { continue; }
-          var label = btn.getAttribute && btn.getAttribute('aria-label');
-          if (!label) { continue; }
-          if (ACTION_LABEL_REGEX.test(label.trim())) {
-            actionButtonsSet.add(btn);
-          }
-        }
-        // Applique ou retire l'opacity selon la pref, et nettoie les
-        // elements qui ne sont plus dans le DOM.
-        var toRemove = [];
-        actionButtonsSet.forEach(function(el) {
-          if (!document.contains || !document.contains(el)) {
-            toRemove.push(el);
-            return;
-          }
-          if (prefs.focusMode) {
-            el.style.opacity = '0.25';
-          } else {
-            // Remettre l'opacity d'origine (= enlever l'inline style)
-            if (el.style.opacity === '0.25') {
-              el.style.opacity = '';
-            }
-          }
-        });
-        for (var j = 0; j < toRemove.length; j++) {
-          actionButtonsSet.delete(toRemove[j]);
-        }
-      }
+      // Les fonctions scanLikeCounts et scanActionButtons ont ete
+      // retirees avec Mode Focus et Masquer compteurs de likes.
 
       /**
        * Bandeau "Ouvrir dans l'application".
@@ -847,13 +663,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // par le CSS pour masquer les spinners et reveler le message.
         var showExploreEmpty = isExploreRoute() && !isExploreSearchActive();
         document.body.classList.toggle('authentique-on-explore-idle', showExploreEmpty);
-
-        // Preferences utilisateur pilotees par des body classes. Les
-        // regles CSS correspondantes sont toujours presentes dans le
-        // bundle, ce qui rend le toggle instantane (hot reload sans
-        // re-injection de style).
-        document.body.classList.toggle('authentique-hide-likes-enabled', !!prefs.hideLikeCounts);
-        document.body.classList.toggle('authentique-focus-mode', !!prefs.focusMode);
       }
 
       // --- Reels card detection (filtre contextuel "Suivre") -------------
@@ -1211,94 +1020,18 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         runSafely('scanSponsored', scanSponsored);
         runSafely('scanSuggestions', scanSuggestions);
         runSafely('scanReels', scanReels);
-        runSafely('scanLikeCounts', scanLikeCounts);
-        runSafely('scanActionButtons', scanActionButtons);
         runSafely('scanReelsFullscreen', scanReelsFullscreen);
         runSafely('scanExplore', scanExplore);
         runSafely('scanDirectSuggestions', scanDirectSuggestions);
         runSafely('scanReelOverlaySuggestions', scanReelOverlaySuggestions);
-        runSafely('scanSponsoredStories', scanSponsoredStories);
         runSafely('closeOpenInAppBanners', closeOpenInAppBanners);
       }
 
-      // --- Scanner stories sponsorisees --------------------------------
-      //
-      // Quand l'utilisateur ouvre la liste des stories de ses amis,
-      // Instagram glisse parfois une story sponsorisee au milieu. On la
-      // detecte par son header qui contient "Sponsorise" en texte, et
-      // on skip automatiquement a la story suivante en simulant le
-      // tap-to-advance sur le cote droit de l'ecran (ou via un bouton
-      // "Next" s'il existe).
-      //
-      // Safety : on limite a 10 skips rapides (< 200ms d'ecart) pour ne
-      // pas partir en boucle infinie si on tombe sur une serie de stories
-      // sponsorisees consecutives.
-      var lastStorySkipTime = 0;
-      var storySkipBurstCount = 0;
-
-      function skipToNextStory() {
-        var now = Date.now();
-        if (now - lastStorySkipTime < 200) {
-          storySkipBurstCount++;
-          if (storySkipBurstCount > 10) { return; }
-        } else {
-          storySkipBurstCount = 0;
-        }
-        lastStorySkipTime = now;
-
-        // Strategie 1 : bouton next explicite si Instagram en expose un
-        var nextBtn = document.querySelector(
-          '[aria-label*="Story suivante" i], ' +
-          '[aria-label*="Next story" i], ' +
-          '[aria-label*="suivante" i]'
-        );
-        if (nextBtn && typeof nextBtn.click === 'function') {
-          nextBtn.click();
-          return;
-        }
-
-        // Strategie 2 : simuler un tap sur la zone tap-to-advance
-        // (cote droit du viewport, milieu vertical)
-        var x = Math.floor(window.innerWidth * 0.85);
-        var y = Math.floor(window.innerHeight * 0.5);
-        var target = document.elementFromPoint(x, y);
-        while (target && target !== document.body) {
-          if (typeof target.click === 'function') {
-            try { target.click(); return; } catch (e) {}
-          }
-          target = target.parentElement;
-        }
-      }
-
-      function scanSponsoredStories() {
-        if (!prefs.hideAds) { return; }
-        var p = location.pathname || '';
-        if (p.indexOf('/stories/') !== 0) { return; }
-
-        // On cherche un element visible dans la zone haute du viewport
-        // (< 180px du top) dont le textContent est exactement une des
-        // needles de sponsorisation. Le header de story d'Instagram
-        // place le label "Sponsorise" juste sous le pseudo, toujours
-        // en haut a gauche.
-        var spans = document.querySelectorAll('span, div');
-        for (var i = 0; i < spans.length; i++) {
-          var el = spans[i];
-          if (el.children && el.children.length > 1) { continue; }
-          var rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
-          if (!rect || rect.top > 180 || rect.top < 0) { continue; }
-          if (rect.width === 0 || rect.height === 0) { continue; }
-          var t = (el.textContent || '').trim();
-          if (!t || t.length > 40) { continue; }
-          if (t === 'Sponsorisé' ||
-              t === 'Sponsorisée' ||
-              t === 'Sponsored' ||
-              t === 'Partenariat rémunéré' ||
-              t === 'Paid partnership') {
-            skipToNextStory();
-            return;
-          }
-        }
-      }
+      // scanSponsoredStories + skipToNextStory ont ete retires dans
+      // un commit de nettoyage. L'approche par click synthetique sur
+      // la zone tap-to-advance etait trop fragile et a casse le reste
+      // du pipeline plusieurs fois. A reintroduire plus tard avec une
+      // autre strategie si besoin.
 
       // --- Scanner "Suggestions" sous un Reel DM -----------------------
       // Quand un ami nous partage un Reel en DM et qu'on l'ouvre, Instagram

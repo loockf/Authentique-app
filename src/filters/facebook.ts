@@ -43,17 +43,6 @@ export function buildFacebookFilters(prefs: FilterPreferences): FilterBundle {
     .authentique-hidden {
       display: none !important;
     }
-
-    ${prefs.focusMode
-      ? `
-    /* Mode Focus : on atténue les actions sociales */
-    [aria-label="J'aime"], [aria-label="Like"],
-    [aria-label="Commenter"], [aria-label="Comment"],
-    [aria-label="Partager"], [aria-label="Share"] {
-      opacity: 0.3 !important;
-    }
-    `
-      : ''}
   `;
 
   const serializedPrefs = JSON.stringify(prefs);
