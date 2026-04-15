@@ -12,8 +12,8 @@ import { defaultPreferences, type FilterPreferences } from '../filters/types';
  * local de l'utilisateur. La regle est simple et non-negociable :
  *
  * ON STOCKE UNIQUEMENT :
- *   - les 5 toggles booleens de l'ecran Parametres :
- *       hideAds, hideSuggestions, hideReels, hideLikeCounts, focusMode
+ *   - les toggles booleens de l'ecran Parametres :
+ *       hideAds, hideSuggestions, hideReels, navSnapToEdge
  *
  * ON NE STOCKE JAMAIS :
  *   - de liste d'abonnements, d'amis, de followers, ni aucune donnee sur

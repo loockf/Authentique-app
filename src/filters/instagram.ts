@@ -142,14 +142,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       display: none !important;
     }
 
-    /* Mode Focus et Masquer compteurs de likes ont ete retires du
-       produit dans un commit de nettoyage. Les features etaient trop
-       fragiles a debugger sans acces DOM direct sur l'Instagram live,
-       et le scope du projet s'en porte mieux : on revient a un set de
-       filtres minimal et solide (sponsored, suggestions, reels du fil,
-       bandeau install, DM, Reel modal). On pourra reintroduire ces
-       deux features plus tard si besoin. */
-
     /* -----------------------------------------------------------------
        Classes universelles de masquage
        -----------------------------------------------------------------
@@ -356,20 +348,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
   const js = `
     (function() {
-      // Diagnostic : premiere chose qu'on fait c'est envoyer un ping
-      // pour prouver que le script charge. Si on voit pas ce message
-      // dans Metro, le script ne tourne pas du tout (probablement une
-      // erreur de parsing en amont).
-      try {
-        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'debug',
-            stage: 'script-alive',
-            url: location.href
-          }));
-        }
-      } catch (e) {}
-
       if (window.__authentiqueInstalled) {
         // Si le script est ré-injecté (hot reload des prefs), on met simplement
         // à jour les préférences et on relance un scan complet.
@@ -382,7 +360,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       var prefs = ${serializedPrefs};
       var hiddenCount = 0;
-      var fullScanTickCount = 0;
 
       // --- Helpers ---------------------------------------------------------
 
@@ -504,20 +481,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // lazy-load des posts suivants. display:none casserait l'infinite
         // scroll et creerait un grand blanc en bas de feed.
         //
-        // IMPORTANT : PAS de caching par attribut ici. Instagram
-        // lazy-load le label "Sponsorise" sous les posts APRES leur
-        // premiere apparition dans le DOM. Si on marque l'article
-        // comme "scanne" lors du premier tick (avant que le label
-        // soit injecte), le tick suivant le skip via le
-        // :not([data-authentique-scanned]) et on rate le label
-        // pour toujours. On re-scanne les articles a chaque tick —
-        // ils sont peu nombreux (< 50), le cout est negligeable.
+        // Caching : on ne scanne QUE les articles qui n'ont pas encore
+        // ete vus (pas d'attribut data-authentique-scanned). Une fois
+        // marque, on ne revient plus dessus meme si son contenu change.
         var articles = document.querySelectorAll(
-          'article:not(.authentique-hidden):not(.authentique-hidden-flow), ' +
-          '[role="article"]:not(.authentique-hidden):not(.authentique-hidden-flow)'
+          'article:not(.authentique-hidden):not(.authentique-hidden-flow):not([' + SCANNED_ATTR + ']), ' +
+          '[role="article"]:not(.authentique-hidden):not(.authentique-hidden-flow):not([' + SCANNED_ATTR + '])'
         );
         for (var i = 0; i < articles.length; i++) {
           var art = articles[i];
+          art.setAttribute(SCANNED_ATTR, '1');
           if (containsText(art, SPONSORED_NEEDLES) || containsAttributeText(art, SPONSORED_NEEDLES)) {
             hideInFlow(art, 'sponsored');
           }
@@ -526,16 +499,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function scanSuggestions() {
         if (!prefs.hideSuggestions) { return; }
-        // Comme scanSponsored : pas de caching. Les headings
-        // "Suggestions pour vous" peuvent apparaitre apres le premier
-        // render initial quand Instagram insere des sections
-        // algorithmiques entre des posts deja lus.
-        var headings = document.querySelectorAll('h2, h3, h4');
+        // Caching : mêmes raisons que scanSponsored. Les headings sont
+        // stables, une fois checke on ne revient pas dessus.
+        var headings = document.querySelectorAll(
+          'h2:not([' + SCANNED_ATTR + ']), ' +
+          'h3:not([' + SCANNED_ATTR + ']), ' +
+          'h4:not([' + SCANNED_ATTR + '])'
+        );
         for (var j = 0; j < headings.length; j++) {
           var h = headings[j];
-          // Skip si deja masque
-          if (h.classList.contains('authentique-hidden') ||
-              h.classList.contains('authentique-hidden-flow')) { continue; }
+          h.setAttribute(SCANNED_ATTR, '1');
           var t = (h.textContent || '').trim();
           if (!t || t.length > 80) { continue; }
           var matched = false;
@@ -567,9 +540,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           }
         }
       }
-
-      // Les fonctions scanLikeCounts et scanActionButtons ont ete
-      // retirees avec Mode Focus et Masquer compteurs de likes.
 
       /**
        * Bandeau "Ouvrir dans l'application".
@@ -1010,65 +980,18 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // dependance fragile sur des labels Instagram qui changent
       // regulierement ("Abonnements" -> "Suivi(e)" en 2024).
 
-      // Wrapper defensif : execute un scanner dans un try-catch et
-      // report l'erreur via postMessage si ca explose. Comme ca une
-      // exception dans un scanner n'interrompt plus tout le pipeline,
-      // et on a une trace remontee a Metro pour debug.
-      function runSafely(name, fn) {
-        try {
-          fn();
-        } catch (err) {
-          try {
-            post({
-              type: 'scanner-error',
-              scanner: name,
-              message: (err && err.message) ? err.message : String(err),
-              stack: (err && err.stack) ? String(err.stack).slice(0, 500) : ''
-            });
-          } catch (e2) {}
-        }
-      }
-
       function fullScan() {
         if (!document.body) { return; }
-        fullScanTickCount++;
-        var hiddenBefore = hiddenCount;
-        runSafely('updateRouteMarker', updateRouteMarker);
-        runSafely('scanSponsored', scanSponsored);
-        runSafely('scanSuggestions', scanSuggestions);
-        runSafely('scanReels', scanReels);
-        runSafely('scanReelsFullscreen', scanReelsFullscreen);
-        runSafely('scanExplore', scanExplore);
-        runSafely('scanDirectSuggestions', scanDirectSuggestions);
-        runSafely('scanReelOverlaySuggestions', scanReelOverlaySuggestions);
-        runSafely('closeOpenInAppBanners', closeOpenInAppBanners);
-
-        // Diagnostic : on emet un summary tous les 4 ticks (= toutes
-        // les 2 secondes avec le poll 500ms) avec le nombre d'articles
-        // trouves dans la page, le nombre cumule d'elements caches, et
-        // la route courante. Aide a debugger a distance.
-        if (fullScanTickCount % 4 === 0) {
-          try {
-            var artCount = document.querySelectorAll('article, [role="article"]').length;
-            var hiddenHere = hiddenCount - hiddenBefore;
-            post({
-              type: 'debug',
-              stage: 'full-scan-summary',
-              tick: fullScanTickCount,
-              route: location.pathname,
-              articlesInDom: artCount,
-              hiddenThisTick: hiddenHere,
-              hiddenTotal: hiddenCount
-            });
-          } catch (e) {}
-        }
+        updateRouteMarker();
+        scanSponsored();
+        scanSuggestions();
+        scanReels();
+        scanReelsFullscreen();
+        scanExplore();
+        scanDirectSuggestions();
+        scanReelOverlaySuggestions();
+        closeOpenInAppBanners();
       }
-
-      // scanSponsoredStories + skipToNextStory ont ete retires dans
-      // un commit de nettoyage. L'approche par click synthetique sur
-      // la zone tap-to-advance etait trop fragile et a casse le reste
-      // du pipeline plusieurs fois. A reintroduire plus tard avec une
-      // autre strategie si besoin.
 
       // --- Scanner "Suggestions" sous un Reel DM -----------------------
       // Quand un ami nous partage un Reel en DM et qu'on l'ouvre, Instagram
@@ -1351,17 +1274,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       var tabSwipeStartY = 0;
       var tabSwipeStartTime = 0;
       function installTabSwipeNav() {
-        // capture: true pour que nos handlers tirent AVANT ceux
-        // d'Instagram (qui pourraient installer leurs propres listeners
-        // bubble-phase et stopper la propagation). En capture phase,
-        // on est garantis de recevoir l'event en premier.
         document.addEventListener('touchstart', function(e) {
           if (e.touches && e.touches.length === 1) {
             tabSwipeStartX = e.touches[0].clientX;
             tabSwipeStartY = e.touches[0].clientY;
             tabSwipeStartTime = Date.now();
           }
-        }, { passive: true, capture: true });
+        }, { passive: true });
 
         document.addEventListener('touchend', function(e) {
           if (!e.changedTouches || e.changedTouches.length !== 1) { return; }
@@ -1369,17 +1288,20 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           var dx = e.changedTouches[0].clientX - tabSwipeStartX;
           var dy = e.changedTouches[0].clientY - tabSwipeStartY;
           var elapsed = Date.now() - tabSwipeStartTime;
-          // Seuils relaxes : 60px au lieu de 80px, 800ms au lieu de 500ms
-          if (Math.abs(dx) < 60) { return; }
-          if (Math.abs(dx) < Math.abs(dy) * 1.5) { return; }
-          if (elapsed > 800) { return; }
+          if (Math.abs(dx) < 80) { return; }
+          if (Math.abs(dx) < Math.abs(dy) * 2) { return; }
+          if (elapsed > 500) { return; }
 
           var currentIndex = getCurrentTabRouteIndex();
           if (currentIndex < 0) { return; }
-          // Convention utilisateur : swipe droite (dx > 0) = onglet suivant
+          // Convention utilisateur inversee par rapport a iOS natif :
+          //   swipe gauche  (dx < 0) -> onglet precedent (index - 1)
+          //   swipe droite  (dx > 0) -> onglet suivant  (index + 1)
+          // C'est ce que l'utilisateur attend intuitivement pour passer
+          // de DM vers profil en swipant vers la droite.
           var nextIndex = dx > 0 ? currentIndex + 1 : currentIndex - 1;
           navigateToTabByIndex(nextIndex);
-        }, { passive: true, capture: true });
+        }, { passive: true });
       }
 
       function start() {

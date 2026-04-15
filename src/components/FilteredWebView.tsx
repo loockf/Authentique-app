@@ -59,23 +59,7 @@ function buildInstallScript(bundle: FilterBundle): string {
         }
       } catch (e) {}
     })();
-    // Top-level try-catch autour du bundle JS : si bundle.js a une
-    // erreur de parsing ou throws au demarrage, on envoie l'erreur
-    // directement a React Native via postMessage. Critique pour
-    // debugger a distance quand rien ne marche.
-    try {
-      ${bundle.js}
-    } catch (bundleErr) {
-      try {
-        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'bundle-error',
-            message: (bundleErr && bundleErr.message) ? bundleErr.message : String(bundleErr),
-            stack: (bundleErr && bundleErr.stack) ? String(bundleErr.stack).slice(0, 500) : ''
-          }));
-        }
-      } catch (e2) {}
-    }
+    ${bundle.js}
   `;
 }
 
@@ -93,26 +77,6 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         const message = JSON.parse(raw) as FilterMessage;
         if (message.type === 'hidden-count') {
           bumpHiddenCount(message.count);
-        } else if (message.type === 'scanner-error') {
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[Authentique filter error]',
-            message.scanner,
-            message.message,
-            message.stack,
-          );
-        } else if (message.type === 'bundle-error') {
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[Authentique BUNDLE error — script failed to parse or crashed]',
-            message.message,
-            message.stack,
-          );
-        } else if (message.type === 'debug') {
-          // Log les diagnostics dans Metro pour voir en live ce que
-          // fait le script injecte.
-          // eslint-disable-next-line no-console
-          console.log('[Authentique debug]', message);
         }
         // Les messages 'ready' sont ignorés côté RN pour l'instant.
       } catch {
@@ -171,12 +135,7 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         // temps, les deux rentrent en conflit et aucun des deux ne marche
         // correctement.
         allowsBackForwardNavigationGestures={false}
-        // pullToRefreshEnabled: false pour empecher le scroll vers le
-        // haut de declencher un rechargement de la page Instagram. Sans
-        // ca, chaque pull-to-refresh recharge la page, ouvre une breve
-        // fenetre de visibilite non-filtree (nos scanners prennent ~500ms
-        // a se remettre en marche), et le contenu suggere reapparait.
-        pullToRefreshEnabled={false}
+        pullToRefreshEnabled={true}
         // Masque la barre iOS ⬆️⬇️✅ qui apparait au-dessus du clavier
         // quand un input HTML est focus. Elle est utile pour naviguer
         // entre les inputs d'un formulaire classique, mais totalement

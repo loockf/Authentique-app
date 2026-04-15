@@ -28,19 +28,7 @@ export const defaultPreferences: FilterPreferences = {
 /** Messages remontés du WebView vers React Native. */
 export type FilterMessage =
   | { type: 'hidden-count'; count: number }
-  | { type: 'ready'; platform: 'instagram' | 'facebook' }
-  | { type: 'scanner-error'; scanner: string; message: string; stack: string }
-  | { type: 'bundle-error'; message: string; stack: string }
-  | {
-      type: 'debug';
-      stage: string;
-      url?: string;
-      tick?: number;
-      route?: string;
-      articlesInDom?: number;
-      hiddenThisTick?: number;
-      hiddenTotal?: number;
-    };
+  | { type: 'ready'; platform: 'instagram' | 'facebook' };
 
 /** Bundle CSS + JS produit pour une plateforme donnée. */
 export type FilterBundle = {
