@@ -15,29 +15,32 @@ import { loadNavPosition, saveNavPosition, type NavPosition } from '../storage/u
  * Bouton de navigation flottant d'Authentique.
  *
  * Mono-fonction : bascule entre l'ecran Instagram et l'ecran Parametres.
- * Plus de menu pill a deployer — un simple tap change l'ecran courant.
+ * Un simple tap change l'ecran courant. Long-press ~400ms + drag pour
+ * deplacer, avec snap-to-edge optionnel.
  *
- *  - Sur Instagram : le bouton affiche "⚙". Tap -> Parametres.
- *  - Sur Parametres : le bouton affiche "←". Tap -> Instagram.
+ *  - Sur Instagram : glyphe "☰" (menu). Tap -> Parametres.
+ *  - Sur Parametres : glyphe "←" (retour). Tap -> Instagram.
  *
- * Long-press ~400ms puis drag pour deplacer le bouton n'importe ou.
- * Au release, si la preference "Aimanter le bouton" est activee
- * (defaut ON), le bouton glisse vers le bord gauche ou droit le plus
- * proche avec une animation spring. Si elle est OFF, il reste exactement
- * la ou l'utilisateur l'a lache. Position persistee en AsyncStorage.
+ * Historique des bugs corriges :
  *
- * Bugs corriges :
- *  - L'ancien PanResponder avait onMoveShouldSetPanResponder qui renvoyait
- *    true sur les grands mouvements, ce qui volait les touches destinees a
- *    la WebView (swipes Instagram). Il retourne maintenant toujours false
- *    et on ne capture que les touches qui DEMARRENT sur le bouton.
- *  - Le bouton "disparaissait" parfois apres plusieurs drags : c'etait
- *    lie a extractOffset/flattenOffset sur Animated.ValueXY qui
- *    devenaient incoherents. Remplace par un tracking manuel via
- *    dragStartRef + currentPosRef.
- *  - currentPosRef est maintenant mis a jour IMMEDIATEMENT au lacher
- *    du drag (avant que la spring anime), pour qu'un tap suivant
- *    lise toujours la derniere position connue.
+ *  - PanResponder volant les touches de la WebView qui demarraient
+ *    ailleurs (cassait le swipe Instagram). Fix : onMove renvoie toujours
+ *    false, on capture uniquement les touches qui demarrent sur nous.
+ *
+ *  - currentPosRef mis a jour en callback de spring (trop tard), causant
+ *    un "bouton qui disparait apres drag". Fix : MAJ immediate au release,
+ *    spring purement visuel.
+ *
+ *  - State React (state.routes[state.index].name) capture dans la closure
+ *    du PanResponder au premier render, devenant stale apres une
+ *    navigation. Du coup le retour Parametres -> Instagram ne marchait
+ *    pas (le handler voyait toujours "Instagram" et tentait d'aller sur
+ *    "Parametres", ou on etait deja). Fix : stateRef mise a jour via
+ *    useEffect sur le prop state, et lue dans le handler.
+ *
+ *  - Auto-snap quand l'utilisateur active "Aimanter" dans les parametres :
+ *    un useEffect detecte la transition false -> true et anime le bouton
+ *    vers le bord le plus proche automatiquement.
  */
 
 const BUTTON_SIZE = 48;
@@ -47,21 +50,39 @@ const EDGE_MARGIN = 12;
 const TOP_SAFE_MARGIN = 60;
 const BOTTOM_SAFE_MARGIN = 40;
 
+function getDefaultPosition(width: number, height: number): NavPosition {
+  // Milieu-droite par defaut — ergonomique pour un pouce droitier
+  // et plus discret que le coin haut-droite ou se trouvent les icones
+  // de Story / Like natives d'Instagram.
+  return {
+    x: width - BUTTON_SIZE - EDGE_MARGIN,
+    y: Math.max(TOP_SAFE_MARGIN, height / 2 - BUTTON_SIZE / 2),
+  };
+}
+
 export function FloatingNav({ state, navigation }: BottomTabBarProps) {
   const { width, height } = useWindowDimensions();
   const { prefs } = useFilters();
 
-  // Position initiale : haut-droite, sous la barre de status iOS.
-  const initialX = width - BUTTON_SIZE - EDGE_MARGIN;
-  const initialY = TOP_SAFE_MARGIN + 20;
+  const defaultPos = getDefaultPosition(width, height);
 
-  // Animated.ValueXY pour le rendu fluide du drag, currentPosRef comme
-  // source de verite logique pour les handlers.
-  const pan = useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
-  const currentPosRef = useRef<NavPosition>({ x: initialX, y: initialY });
-  const dragStartRef = useRef<NavPosition>({ x: initialX, y: initialY });
+  const pan = useRef(new Animated.ValueXY(defaultPos)).current;
+  const currentPosRef = useRef<NavPosition>(defaultPos);
+  const dragStartRef = useRef<NavPosition>(defaultPos);
   const dimRef = useRef({ width, height });
   const snapEnabledRef = useRef(prefs.navSnapToEdge);
+
+  // Closures React Navigation : le `state` et `navigation` props sont mis
+  // a jour a chaque changement, mais le PanResponder est cree une seule
+  // fois via useRef et garde l'ancienne valeur dans sa closure. On passe
+  // par un ref mis a jour a chaque render pour que le handler voie la
+  // derniere valeur.
+  const stateRef = useRef(state);
+  const navigationRef = useRef(navigation);
+  useEffect(() => {
+    stateRef.current = state;
+    navigationRef.current = navigation;
+  }, [state, navigation]);
 
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
@@ -69,14 +90,31 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
     isDraggingRef.current = isDragging;
   }, [isDragging]);
 
-  // Refs sync pour que les closures du PanResponder voient la valeur courante.
   useEffect(() => {
     dimRef.current = { width, height };
   }, [width, height]);
 
+  // Auto-snap : quand prefs.navSnapToEdge passe de false a true, on anime
+  // le bouton vers le bord le plus proche pour "remettre de l'ordre".
+  const prevSnapRef = useRef(prefs.navSnapToEdge);
   useEffect(() => {
-    snapEnabledRef.current = prefs.navSnapToEdge;
-  }, [prefs.navSnapToEdge]);
+    const wasOff = !prevSnapRef.current;
+    const isOn = prefs.navSnapToEdge;
+    snapEnabledRef.current = isOn;
+    if (wasOff && isOn) {
+      const cur = currentPosRef.current;
+      const snapped = snapToEdge(cur, dimRef.current.width);
+      currentPosRef.current = snapped;
+      void saveNavPosition(snapped);
+      Animated.spring(pan, {
+        toValue: snapped,
+        useNativeDriver: false,
+        friction: 8,
+        tension: 60,
+      }).start();
+    }
+    prevSnapRef.current = isOn;
+  }, [prefs.navSnapToEdge, pan]);
 
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -106,10 +144,7 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
 
   const panResponder = useRef(
     PanResponder.create({
-      // Capture uniquement les touches qui DEMARRENT sur le bouton.
       onStartShouldSetPanResponder: () => true,
-      // CRUCIAL : ne JAMAIS voler les touches qui demarrent ailleurs,
-      // sinon on casse les swipes horizontaux d'Instagram.
       onMoveShouldSetPanResponder: () => false,
       onPanResponderGrant: () => {
         dragStartRef.current = { ...currentPosRef.current };
@@ -147,8 +182,6 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
             ? snapToEdge(clamped, w)
             : clamped;
 
-          // MAJ de la verite IMMEDIATEMENT, avant le spring. Comme ca,
-          // un tap juste apres le release lit deja la bonne position.
           currentPosRef.current = final;
           void saveNavPosition(final);
 
@@ -164,10 +197,11 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
           return;
         }
 
-        // Tap pur : bascule vers l'autre ecran.
-        const currentRouteName = state.routes[state.index]?.name;
+        // Tap : bascule via stateRef + navigationRef (valeurs courantes).
+        const currentState = stateRef.current;
+        const currentRouteName = currentState.routes[currentState.index]?.name;
         const nextRoute = currentRouteName === 'Instagram' ? 'Paramètres' : 'Instagram';
-        navigation.navigate(nextRoute as never);
+        navigationRef.current.navigate(nextRoute as never);
       },
       onPanResponderTerminate: () => {
         clearLongPressTimer();
@@ -178,7 +212,7 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
   ).current;
 
   const currentRouteName = state.routes[state.index]?.name ?? 'Instagram';
-  const glyph = currentRouteName === 'Instagram' ? '⚙' : '←';
+  const glyph = currentRouteName === 'Instagram' ? '☰' : '←';
 
   return (
     <Animated.View
@@ -215,6 +249,16 @@ function snapToEdge(pos: NavPosition, width: number): NavPosition {
   return { x: snappedX, y: pos.y };
 }
 
+/**
+ * Helper utilise par SettingsScreen pour reinitialiser la position du
+ * bouton depuis Parametres. Retour a la position par defaut.
+ */
+export async function resetNavPositionToDefault(width: number, height: number): Promise<NavPosition> {
+  const def = getDefaultPosition(width, height);
+  await saveNavPosition(def);
+  return def;
+}
+
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
@@ -243,9 +287,9 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fafaf7',
-    fontSize: 22,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: '500',
     letterSpacing: 0.3,
-    lineHeight: 26,
+    lineHeight: 28,
   },
 });

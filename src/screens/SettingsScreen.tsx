@@ -1,8 +1,17 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFilters } from '../context/FiltersContext';
 import type { FilterPreferences } from '../filters/types';
+import { resetNavPositionToDefault } from '../components/FloatingNav';
 import { colors } from '../theme/colors';
 
 /**
@@ -51,6 +60,14 @@ const TOGGLES: Toggle[] = [
 
 export function SettingsScreen() {
   const { prefs, setPref, hiddenCount } = useFilters();
+  const { width, height } = useWindowDimensions();
+  const [resetFeedback, setResetFeedback] = React.useState(false);
+
+  const handleResetPosition = async () => {
+    await resetNavPositionToDefault(width, height);
+    setResetFeedback(true);
+    setTimeout(() => setResetFeedback(false), 1800);
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -74,6 +91,26 @@ export function SettingsScreen() {
               />
             </View>
           ))}
+
+          <Pressable
+            onPress={handleResetPosition}
+            style={({ pressed }) => [
+              styles.row,
+              styles.rowAction,
+              pressed && styles.rowPressed,
+            ]}
+          >
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>
+                Réinitialiser la position du bouton
+              </Text>
+              <Text style={styles.rowDescription}>
+                {resetFeedback
+                  ? 'Position réinitialisée ✓ (relancez l\'app pour la voir appliquée)'
+                  : 'Remet le bouton flottant à sa position par défaut (milieu-droite)'}
+              </Text>
+            </View>
+          </Pressable>
         </View>
 
         <View style={styles.footer}>
@@ -135,6 +172,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+  },
+  rowAction: {
+    borderBottomWidth: 0,
+  },
+  rowPressed: {
+    backgroundColor: colors.background,
   },
   rowText: {
     flex: 1,

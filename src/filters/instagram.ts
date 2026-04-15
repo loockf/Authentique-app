@@ -145,16 +145,20 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     /* -----------------------------------------------------------------
        Masquage des compteurs de likes
        -----------------------------------------------------------------
-       Les elements qu'on veut masquer sont taggues par le JS avec la
-       classe .authentique-hide-likes (via scanLikeCounts qui matche
-       regex sur textContent). Les regles ici se contentent d'appliquer
-       visibility: hidden quand le body porte la classe -enabled.
+       Multi-strategy : on combine selecteurs CSS directs (liens liked_by,
+       aria-label commençant par "Aim"/"Liked") ET tagging JS via regex
+       sur le textContent, parce qu'aucune approche seule ne couvre tous
+       les patterns Instagram modernes.
 
-       On a renonce aux selecteurs CSS purs (aria-label, href*="liked_by")
-       parce qu'ils ne captaient qu'une fraction des patterns Instagram
-       modernes, ou le compteur est souvent un span sibling du bouton
-       heart et non descendant.
+       Le body class .authentique-hide-likes-enabled est pose par
+       updateRouteMarker quand prefs.hideLikeCounts est true.
     */
+    body.authentique-hide-likes-enabled a[href*="liked_by"],
+    body.authentique-hide-likes-enabled a[href*="liked_by"] *,
+    body.authentique-hide-likes-enabled [aria-label^="Aim" i],
+    body.authentique-hide-likes-enabled [aria-label^="Liked" i],
+    body.authentique-hide-likes-enabled [aria-label^="Voir les personnes qui aiment" i],
+    body.authentique-hide-likes-enabled [aria-label^="See people who liked" i],
     body.authentique-hide-likes-enabled .authentique-hide-likes {
       visibility: hidden !important;
     }
@@ -162,21 +166,44 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     /* -----------------------------------------------------------------
        Mode Focus
        -----------------------------------------------------------------
-       Meme approche par tagging : le JS scanne les boutons dont
-       l'aria-label matche un regex d'action (J'aime, Commenter,
-       Partager, Enregistrer, et leurs variantes FR/EN), leur pose la
-       classe .authentique-action-btn, et cette regle les attenue a
-       25% d'opacite quand le body porte .authentique-focus-mode.
+       Strategie nuclear : on utilise [aria-label^="..." i] (start-of-string,
+       case-insensitive) directement en CSS, + le tagging JS via regex
+       comme backup. L'operateur ^= matche "J'aime" ET "J'aime ce post"
+       ET "J'aime cette publication" sans toucher a "J'aimerais" (qui ne
+       commence pas par "J'aime" + separateur).
 
-       Pourquoi JS plutot que CSS : les aria-labels d'Instagram sont
-       souvent plus longs que "J'aime" seul (p.ex. "J'aime ce post",
-       "Commenter cette publication"). Les matchs exacts CSS (= "J'aime")
-       ratent tout ca, et les matchs partiels CSS (*="Comment") matchent
-       trop (p.ex. "Comment allez-vous" comme tooltip). Le regex JS
-       fait les deux : patterns start-of-string precis qui attrapent
-       "J'aime" et "J'aime ce post" mais pas "J'aimerais".
+       Liste explicite des prefixes d'aria-label Instagram connus.
     */
+    body.authentique-focus-mode [aria-label^="J'aime" i],
+    body.authentique-focus-mode [aria-label^="J’aime" i],
+    body.authentique-focus-mode [aria-label^="Je n'aime plus" i],
+    body.authentique-focus-mode [aria-label^="Je n’aime plus" i],
+    body.authentique-focus-mode [aria-label^="Like" i],
+    body.authentique-focus-mode [aria-label^="Unlike" i],
+    body.authentique-focus-mode [aria-label^="Commenter" i],
+    body.authentique-focus-mode [aria-label^="Comment" i],
+    body.authentique-focus-mode [aria-label^="Partager" i],
+    body.authentique-focus-mode [aria-label^="Envoyer" i],
+    body.authentique-focus-mode [aria-label^="Share" i],
+    body.authentique-focus-mode [aria-label^="Send" i],
+    body.authentique-focus-mode [aria-label^="Enregistrer" i],
+    body.authentique-focus-mode [aria-label^="Ne plus enregistrer" i],
+    body.authentique-focus-mode [aria-label^="Save" i],
+    body.authentique-focus-mode [aria-label^="Bookmark" i],
     body.authentique-focus-mode .authentique-action-btn {
+      opacity: 0.25 !important;
+    }
+    /* Si l'icone est un svg dedans, on attenue aussi pour la specificite */
+    body.authentique-focus-mode [aria-label^="J'aime" i] svg,
+    body.authentique-focus-mode [aria-label^="Like" i] svg,
+    body.authentique-focus-mode [aria-label^="Commenter" i] svg,
+    body.authentique-focus-mode [aria-label^="Comment" i] svg,
+    body.authentique-focus-mode [aria-label^="Partager" i] svg,
+    body.authentique-focus-mode [aria-label^="Share" i] svg,
+    body.authentique-focus-mode [aria-label^="Envoyer" i] svg,
+    body.authentique-focus-mode [aria-label^="Send" i] svg,
+    body.authentique-focus-mode [aria-label^="Enregistrer" i] svg,
+    body.authentique-focus-mode [aria-label^="Save" i] svg {
       opacity: 0.25 !important;
     }
 
@@ -1133,7 +1160,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       ];
       function scanReelOverlaySuggestions() {
         if (!isDMReelOverlayOpen()) { return; }
-        var headings = document.querySelectorAll('h2, h3, h4, [role="heading"], span');
+        // Selecteur RESTRICTIF : on ne scan que les vrais headings, pas
+        // les span. L'ancienne version incluait les span qui causait des
+        // faux positifs sur n'importe quel span avec texte "Suggestions"
+        // ailleurs dans l'UI — walk-up trop agressif -> hide du reel modal
+        // entier -> ecran noir.
+        var headings = document.querySelectorAll('h2, h3, h4, [role="heading"]');
         for (var i = 0; i < headings.length; i++) {
           var h = headings[i];
           if (h.classList.contains('authentique-hidden')) { continue; }
@@ -1145,18 +1177,26 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
             if (t === REEL_OVERLAY_SUGGEST_NEEDLES[j]) { matched = true; break; }
           }
           if (!matched) { continue; }
-          // Walk up un peu et hide le conteneur substantiel
+          // Walk up reduit (2 niveaux max) + guard sur la taille max.
+          // Si le candidat fait > 70% du viewport on refuse : c'est
+          // probablement le container du reel entier, pas la section
+          // "Suggestions" en-dessous.
           var container = h.parentElement;
-          var depth = 0;
-          while (container && container !== document.body && depth < 6) {
-            if (container.offsetHeight >= 100) { break; }
+          if (container && container.parentElement) {
             container = container.parentElement;
-            depth++;
           }
           if (container && container !== document.body) {
             var mainEl = document.querySelector('main') || document.querySelector('[role="main"]');
-            if (container !== mainEl && !(mainEl && container.contains(mainEl))) {
+            var containerHeight = container.offsetHeight || 0;
+            var maxSafeHeight = window.innerHeight * 0.7;
+            if (container !== mainEl &&
+                !(mainEl && container.contains(mainEl)) &&
+                containerHeight <= maxSafeHeight) {
               hide(container, 'reel-overlay-suggestion');
+            } else {
+              // Fallback : hide juste le heading lui-meme si le container
+              // candidat est trop gros (risque de cacher tout le modal).
+              hide(h, 'reel-overlay-suggestion-heading-only');
             }
           }
         }
@@ -1300,46 +1340,84 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       //    [role="presentation"] (carousel), [role="button"] (clickable).
       //  - On exige un mouvement horizontal dominant (|dx| > 2 × |dy|) et
       //    une duree courte (< 500ms) pour ne pas confondre avec un scroll.
+      // TAB_ROUTE_ORDER contient 4 routes fixes. L'index 4 est un
+      // placeholder pour "profil" dont l'URL depend du pseudo de
+      // l'utilisateur et qu'on trouve dynamiquement via findProfileLink.
       var TAB_ROUTE_ORDER = ['/', '/explore/', '/reels/', '/direct/inbox/'];
+      var PROFILE_INDEX = 4;
+
       function isSwipableRootRoute() {
+        // On EXCLUT /reels/ parce que le swipe horizontal rentre en
+        // conflit avec la navigation verticale des Reels fullscreen
+        // (l'utilisateur scrollerait intentionnellement et basculerait
+        // d'onglet par accident).
         var p = location.pathname || '';
         if (p === '' || p === '/') { return true; }
         if (p === '/explore/' || p === '/explore') { return true; }
-        if (p === '/reels/' || p === '/reels') { return true; }
         if (p === '/direct/inbox/' || p === '/direct/inbox') { return true; }
+        // Sur une page profil /{pseudo}/ on autorise aussi pour
+        // pouvoir swipe retour vers direct.
+        if (/^\/[a-zA-Z0-9._]{3,30}\/?$/.test(p)) { return true; }
         return false;
       }
+
       function getCurrentTabRouteIndex() {
         var p = location.pathname || '';
         if (p === '' || p === '/') { return 0; }
         if (p.indexOf('/explore') === 0) { return 1; }
         if (p.indexOf('/reels') === 0) { return 2; }
         if (p.indexOf('/direct') === 0) { return 3; }
+        // Page profil /{pseudo}/
+        if (/^\/[a-zA-Z0-9._]{3,30}\/?$/.test(p)) { return PROFILE_INDEX; }
         return -1;
       }
+
       function findTabLink(route) {
-        // Cherche un <a href> qui correspond a la route cible, en
-        // prefereant ceux dans la bottom nav (role=tablist ou role=link).
-        // Les selecteurs exacts varient mais href commence par notre route.
         var candidates = document.querySelectorAll('a[href^="' + route + '"]');
-        // Retour du premier visible
         for (var i = 0; i < candidates.length; i++) {
           var a = candidates[i];
           if (a.offsetWidth > 0 && a.offsetHeight > 0) { return a; }
         }
         return null;
       }
+
+      function findProfileNavLink() {
+        // Le lien de profil dans la bottom nav est un <a href="/{pseudo}/">
+        // et est typiquement positionne dans la zone basse de l'ecran
+        // (bottom nav). On filtre par regex sur href + position viewport.
+        var links = document.querySelectorAll('a[href]');
+        for (var i = 0; i < links.length; i++) {
+          var link = links[i];
+          var href = link.getAttribute('href') || '';
+          if (!/^\/[a-zA-Z0-9._]{3,30}\/?$/.test(href) || href === '/') { continue; }
+          // Doit etre visible et dans le tiers bas du viewport
+          if (link.offsetWidth === 0 || link.offsetHeight === 0) { continue; }
+          var rect = link.getBoundingClientRect();
+          if (rect.top > window.innerHeight * 0.7) {
+            return link;
+          }
+        }
+        return null;
+      }
+
       function navigateToTabByIndex(index) {
-        if (index < 0 || index >= TAB_ROUTE_ORDER.length) { return; }
+        if (index < 0 || index > PROFILE_INDEX) { return; }
+        if (index === PROFILE_INDEX) {
+          var profileLink = findProfileNavLink();
+          if (profileLink && typeof profileLink.click === 'function') {
+            profileLink.click();
+          }
+          return;
+        }
         var route = TAB_ROUTE_ORDER[index];
         var link = findTabLink(route);
         if (link && typeof link.click === 'function') {
           link.click();
         } else {
-          // Fallback : navigation directe
           try { location.href = route; } catch (e) {}
         }
       }
+
       var tabSwipeStartX = 0;
       var tabSwipeStartY = 0;
       var tabSwipeStartTime = 0;
@@ -1364,8 +1442,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
           var currentIndex = getCurrentTabRouteIndex();
           if (currentIndex < 0) { return; }
-          // Swipe gauche (dx < 0) -> onglet suivant, swipe droite -> precedent
-          var nextIndex = dx < 0 ? currentIndex + 1 : currentIndex - 1;
+          // Convention utilisateur inversee par rapport a iOS natif :
+          //   swipe gauche  (dx < 0) -> onglet precedent (index - 1)
+          //   swipe droite  (dx > 0) -> onglet suivant  (index + 1)
+          // C'est ce que l'utilisateur attend intuitivement pour passer
+          // de DM vers profil en swipant vers la droite.
+          var nextIndex = dx > 0 ? currentIndex + 1 : currentIndex - 1;
           navigateToTabByIndex(nextIndex);
         }, { passive: true });
       }
