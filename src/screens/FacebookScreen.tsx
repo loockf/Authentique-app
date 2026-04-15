@@ -20,7 +20,7 @@ export function FacebookScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.container}>
         <FilteredWebView
-          uri="https://m.facebook.com/friends"
+          uri="https://www.facebook.com/feeds/friends/"
           filters={filters}
         />
         <HiddenBadge count={hiddenCount} />
