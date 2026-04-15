@@ -530,18 +530,31 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        * seulement dans le noeud muté. C'est légèrement plus coûteux mais
        * évite de rater des éléments ajoutés dans des emplacements imbriqués.
        */
+      // Attribut pose sur les elements qu'on a deja scannes et juges
+      // non-pertinents, pour ne pas les re-evaluer a chaque tick du
+      // poll setInterval. L'attribut seul (pas de classe) garantit
+      // qu'il n'interfere avec rien cote Instagram.
+      // Gagne beaucoup sur les longues pages de feed : une fois qu'un
+      // article / heading / span a ete verifie, on le skip.
+      var SCANNED_ATTR = 'data-authentique-scanned';
+
       function scanSponsored() {
         if (!prefs.hideAds) { return; }
         // Les posts du fil sont masques avec hideInFlow() pour que
         // l'IntersectionObserver d'Instagram continue a declencher le
         // lazy-load des posts suivants. display:none casserait l'infinite
         // scroll et creerait un grand blanc en bas de feed.
+        //
+        // Caching : on ne scanne QUE les articles qui n'ont pas encore
+        // ete vus (pas d'attribut data-authentique-scanned). Une fois
+        // marque, on ne revient plus dessus meme si son contenu change.
         var articles = document.querySelectorAll(
-          'article:not(.authentique-hidden):not(.authentique-hidden-flow), ' +
-          '[role="article"]:not(.authentique-hidden):not(.authentique-hidden-flow)'
+          'article:not(.authentique-hidden):not(.authentique-hidden-flow):not([' + SCANNED_ATTR + ']), ' +
+          '[role="article"]:not(.authentique-hidden):not(.authentique-hidden-flow):not([' + SCANNED_ATTR + '])'
         );
         for (var i = 0; i < articles.length; i++) {
           var art = articles[i];
+          art.setAttribute(SCANNED_ATTR, '1');
           if (containsText(art, SPONSORED_NEEDLES) || containsAttributeText(art, SPONSORED_NEEDLES)) {
             hideInFlow(art, 'sponsored');
           }
@@ -550,9 +563,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function scanSuggestions() {
         if (!prefs.hideSuggestions) { return; }
-        var headings = document.querySelectorAll('h2, h3, h4, span');
+        // Caching : mêmes raisons que scanSponsored. Les headings sont
+        // stables, une fois checke on ne revient pas dessus.
+        var headings = document.querySelectorAll(
+          'h2:not([' + SCANNED_ATTR + ']), ' +
+          'h3:not([' + SCANNED_ATTR + ']), ' +
+          'h4:not([' + SCANNED_ATTR + '])'
+        );
         for (var j = 0; j < headings.length; j++) {
           var h = headings[j];
+          h.setAttribute(SCANNED_ATTR, '1');
           var t = (h.textContent || '').trim();
           if (!t || t.length > 80) { continue; }
           var matched = false;
@@ -611,10 +631,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // tagge a ce moment-la.
         if (!prefs.hideLikeCounts) { return; }
 
-        var spans = document.querySelectorAll('span');
+        // Caching : on n'itere que les spans jamais vus. Le premier
+        // scan sur une page tagge tout, les scans suivants ne traitent
+        // que les nouveaux spans (ceux du lazy-load au scroll).
+        var spans = document.querySelectorAll('span:not([' + SCANNED_ATTR + '])');
         for (var i = 0; i < spans.length; i++) {
           var el = spans[i];
-          if (el.classList.contains('authentique-hide-likes')) { continue; }
+          el.setAttribute(SCANNED_ATTR, '1');
           if (el.children && el.children.length > 0) { continue; }
           var t = (el.textContent || '').trim();
           if (!t || t.length > 40) { continue; }

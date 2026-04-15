@@ -14,23 +14,29 @@ import { loadNavPosition, saveNavPosition, type NavPosition } from '../storage/u
 /**
  * Bouton de navigation flottant d'Authentique.
  *
- * Remplace la RN tab bar classique (qui volait de la place en bas et
- * recouvrait parfois les boutons natifs d'Instagram ou Facebook). Ce
- * composant est un cercle 48pt semi-transparent qu'on peut :
+ * Cercle 48pt semi-transparent draggable qui remplace la tab bar native
+ * en bas de l'ecran. Tap pour ouvrir un menu pill horizontal, long-press
+ * ~400ms puis drag pour le deplacer, snap automatique vers le bord gauche
+ * ou droit le plus proche au lacher. Position persistee en AsyncStorage.
  *
- *  - Tapoter pour ouvrir un "menu pill" horizontal qui propose les 3
- *    onglets (Instagram / Facebook / Parametres) cote-a-cote.
- *  - Maintenir appuye ~400ms puis glisser pour le deplacer n'importe
- *    ou sur l'ecran. Au lacher, le bouton "snap" vers le bord gauche
- *    ou droit le plus proche (comportement a la Messenger chat heads)
- *    pour ne pas rester au milieu de l'ecran.
- *  - Sa position est sauvegardee en AsyncStorage via uiState.ts et
- *    restauree au prochain lancement.
+ * Historique des bugs corriges :
  *
- * React Navigation injecte ce composant via le prop `tabBar` de
- * Tab.Navigator, ce qui nous donne automatiquement acces a l'etat de
- * navigation (`state`) et a l'objet `navigation` pour naviguer entre
- * les onglets, sans avoir besoin de navigationRef ou de Context custom.
+ *  - Le PanResponder volait les touches de la WebView qui demarraient
+ *    ailleurs et traversaient sa zone (swipe horizontal Instagram broke).
+ *    Fix : onMoveShouldSetPanResponder retourne toujours false. Le
+ *    PanResponder ne capture QUE les touches qui demarrent sur le bouton
+ *    (via onStartShouldSetPanResponder), jamais celles qui se deplacent
+ *    vers lui depuis ailleurs.
+ *
+ *  - Le menu pill s'etendait toujours vers la droite, debordant de
+ *    l'ecran quand le bouton etait proche du bord droit. Fix : detection
+ *    de position, expansion vers la gauche via flexDirection row-reverse
+ *    quand le bouton est sur la moitie droite du viewport.
+ *
+ *  - Le bouton disparaissait apres certains drags a cause d'incoherences
+ *    entre extractOffset/flattenOffset et les valeurs internes de
+ *    Animated.ValueXY. Fix : tracking manuel de la position de depart,
+ *    sans extractOffset/flattenOffset. Plus simple, plus previsible.
  */
 
 const BUTTON_SIZE = 48;
@@ -39,6 +45,7 @@ const DRAG_CANCEL_THRESHOLD = 8;
 const EDGE_MARGIN = 12;
 const TOP_SAFE_MARGIN = 60;
 const BOTTOM_SAFE_MARGIN = 40;
+const MENU_WIDTH = BUTTON_SIZE * 3 - 4; // 3 menu items + padding
 
 type TabMeta = { letter: string; color: string };
 
@@ -54,24 +61,33 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
   const { width, height } = useWindowDimensions();
 
   // Position initiale : haut-droite, sous la barre de status iOS.
-  // On la stocke dans une Animated.ValueXY pour que le drag soit
-  // smooth (pas de re-render React a chaque frame).
   const initialX = width - BUTTON_SIZE - EDGE_MARGIN;
   const initialY = TOP_SAFE_MARGIN + 20;
 
+  // Refs qui restent synchronises a travers les closures du PanResponder.
+  // Animated.ValueXY piloite l'animation visuelle, mais la "verite" est
+  // dans currentPosRef qu'on met a jour a la main.
   const pan = useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
-  const currentPositionRef = useRef<NavPosition>({ x: initialX, y: initialY });
+  const currentPosRef = useRef<NavPosition>({ x: initialX, y: initialY });
+  const dragStartRef = useRef<NavPosition>({ x: initialX, y: initialY });
+  const dimRef = useRef({ width, height });
 
+  // La source de verite reactive pour decider la direction du menu pill
+  // (gauche vs droite). On met a jour via une key dans le state quand
+  // menu s'ouvre pour forcer un re-render avec la bonne direction.
+  const [menuDirection, setMenuDirection] = useState<'left' | 'right'>('left');
   const [isDragging, setIsDragging] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Ref sync avec isDragging pour que le closure du PanResponder
-  // voie toujours la valeur a jour (sinon il garde la valeur initiale
-  // capturee a la creation du PanResponder).
   const isDraggingRef = useRef(false);
   useEffect(() => {
     isDraggingRef.current = isDragging;
   }, [isDragging]);
+
+  // Keep dimensions ref fresh for PanResponder closures (rotation safety)
+  useEffect(() => {
+    dimRef.current = { width, height };
+  }, [width, height]);
 
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -82,11 +98,9 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
       if (cancelled || !pos) {
         return;
       }
-      // Clamp aux dimensions actuelles de l'ecran, au cas ou l'utilisateur
-      // ait tourne son iPhone ou change de device entre deux lancements.
       const clamped = clampPosition(pos, width, height);
       pan.setValue(clamped);
-      currentPositionRef.current = clamped;
+      currentPosRef.current = clamped;
     });
     return () => {
       cancelled = true;
@@ -103,19 +117,14 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
 
   const panResponder = useRef(
     PanResponder.create({
+      // Capture uniquement les touches qui DEMARRENT sur le bouton.
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gesture) => {
-        return (
-          isDraggingRef.current ||
-          Math.abs(gesture.dx) > DRAG_CANCEL_THRESHOLD ||
-          Math.abs(gesture.dy) > DRAG_CANCEL_THRESHOLD
-        );
-      },
+      // Ne JAMAIS voler les touches qui demarrent ailleurs (critique pour
+      // que les swipes horizontaux d'Instagram passent a travers).
+      onMoveShouldSetPanResponder: () => false,
       onPanResponderGrant: () => {
-        // On capture la position actuelle comme offset et on remet
-        // la valeur courante a 0 — ca permet de calculer les deltas
-        // du gesture directement sans avoir a suivre l'offset a la main.
-        pan.extractOffset();
+        // Snapshot de la position courante comme point de depart du drag.
+        dragStartRef.current = { ...currentPosRef.current };
         longPressTimerRef.current = setTimeout(() => {
           isDraggingRef.current = true;
           setIsDragging(true);
@@ -123,12 +132,15 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
       },
       onPanResponderMove: (_, gesture) => {
         if (isDraggingRef.current) {
-          pan.setValue({ x: gesture.dx, y: gesture.dy });
+          // En mode drag : position = start + delta gesture
+          const newX = dragStartRef.current.x + gesture.dx;
+          const newY = dragStartRef.current.y + gesture.dy;
+          pan.setValue({ x: newX, y: newY });
           return;
         }
         // Si l'utilisateur bouge trop avant que le long-press ait tire,
-        // on annule le long-press — il voulait scroller dans la WebView,
-        // pas deplacer le bouton.
+        // on annule le long-press — c'etait un scroll ou un tap qui a
+        // glisse, pas une intention de drag.
         if (
           Math.abs(gesture.dx) > DRAG_CANCEL_THRESHOLD ||
           Math.abs(gesture.dy) > DRAG_CANCEL_THRESHOLD
@@ -140,33 +152,44 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
         clearLongPressTimer();
 
         if (isDraggingRef.current) {
-          // Fin d'un drag : on fige l'offset, on clamp et on snap au bord.
-          pan.flattenOffset();
-          const rawX = (pan.x as unknown as { _value: number })._value;
-          const rawY = (pan.y as unknown as { _value: number })._value;
-          const clamped = clampPosition({ x: rawX, y: rawY }, width, height);
-          const snapped = snapToEdge(clamped, width);
+          // Lecture directe de la valeur finale, pas de flattenOffset
+          const w = dimRef.current.width;
+          const h = dimRef.current.height;
+          const endX = (pan.x as unknown as { _value: number })._value;
+          const endY = (pan.y as unknown as { _value: number })._value;
+          const safeX = isFinite(endX) ? endX : currentPosRef.current.x;
+          const safeY = isFinite(endY) ? endY : currentPosRef.current.y;
+          const clamped = clampPosition({ x: safeX, y: safeY }, w, h);
+          const snapped = snapToEdge(clamped, w);
+
           Animated.spring(pan, {
             toValue: snapped,
             useNativeDriver: false,
             friction: 8,
             tension: 60,
           }).start(() => {
-            currentPositionRef.current = snapped;
+            // Mise a jour de la verite apres la fin de l'animation
+            currentPosRef.current = snapped;
             void saveNavPosition(snapped);
           });
+
           isDraggingRef.current = false;
           setIsDragging(false);
           return;
         }
 
-        // Tap pur (pas de drag) : on annule l'offset et on toggle le menu.
-        pan.flattenOffset();
+        // Tap pur (pas de drag) : on toggle le menu.
+        // Avant d'ouvrir, on decide de la direction selon la position
+        // actuelle du bouton. Si le bouton est sur la moitie droite du
+        // viewport, le menu doit s'etendre vers la gauche pour rester
+        // visible a l'ecran.
+        const w = dimRef.current.width;
+        const buttonCenterX = currentPosRef.current.x + BUTTON_SIZE / 2;
+        setMenuDirection(buttonCenterX > w / 2 ? 'left' : 'right');
         setIsMenuOpen((prev) => !prev);
       },
       onPanResponderTerminate: () => {
         clearLongPressTimer();
-        pan.flattenOffset();
         isDraggingRef.current = false;
         setIsDragging(false);
       },
@@ -192,7 +215,16 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
       ]}
     >
       {isMenuOpen ? (
-        <View style={styles.menuPill}>
+        <View
+          style={[
+            styles.menuPill,
+            // Ancre le menu a gauche OU a droite du bouton selon la
+            // direction calculee au moment du tap.
+            menuDirection === 'left'
+              ? styles.menuPillAlignRight
+              : styles.menuPillAlignLeft,
+          ]}
+        >
           {TAB_ORDER.map((routeName) => {
             const meta = TAB_META[routeName];
             const isActive = routeName === activeRouteName;
@@ -209,12 +241,7 @@ export function FloatingNav({ state, navigation }: BottomTabBarProps) {
           })}
         </View>
       ) : (
-        <View
-          style={[
-            styles.button,
-            isDragging && styles.buttonDragging,
-          ]}
-        >
+        <View style={[styles.button, isDragging && styles.buttonDragging]}>
           <Text style={[styles.buttonText, { color: activeMeta.color }]}>
             {activeMeta.letter}
           </Text>
@@ -247,7 +274,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    // zIndex eleve pour rester au-dessus de la WebView
     zIndex: 1000,
     elevation: 10,
   },
@@ -258,7 +284,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(28, 28, 26, 0.72)',
     alignItems: 'center',
     justifyContent: 'center',
-    // Petite ombre pour flotter "par-dessus" le contenu
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -285,6 +310,19 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
+    width: MENU_WIDTH,
+  },
+  // menuPillAlignRight : le menu part du point de depart du bouton et
+  // s'etend vers la gauche. On obtient ca en utilisant un offset negatif
+  // a gauche, calcule pour que le bord droit du pill coincide avec le
+  // bord droit du bouton.
+  menuPillAlignRight: {
+    position: 'relative',
+    left: -(MENU_WIDTH - BUTTON_SIZE),
+  },
+  menuPillAlignLeft: {
+    position: 'relative',
+    left: 0,
   },
   menuItem: {
     width: BUTTON_SIZE - 12,
