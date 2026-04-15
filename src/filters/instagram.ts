@@ -320,17 +320,27 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     body.authentique-reel-locked [role="main"] {
       overscroll-behavior: none !important;
       touch-action: pan-x !important;
-      /* Override defensif contre le clipping natif Instagram : on
-         force overflow: visible pour tenter de deboucher les boutons
-         d'action du reel qui sont parfois caches derriere une "bande
-         noire" a cause d'un max-width/overflow hidden applique par
-         Instagram sur le conteneur du reel modal. */
       overflow: visible !important;
+      max-width: 100vw !important;
+      min-width: 0 !important;
     }
 
+    /* Nuclear : on force overflow: visible + max-width + clip: auto
+       sur TOUS les descendants du lock. Instagram place les boutons
+       d'action du reel (heart, comment, share, save) dans un conteneur
+       qui peut avoir un max-width plus etroit que le viewport, OU un
+       overflow: hidden sur un ancetre profond. L'un des deux cause la
+       "bande noire" qui cache les boutons. On force les deux a visible
+       pour deboucher tout ce qui pourrait etre clipe. Trade-off : on
+       perd les scroll containers internes au reel lock, mais dans ce
+       contexte il ne doit rien y avoir a scroller de toute facon. */
     body.authentique-reel-locked *:not(video):not(input):not(textarea) {
       overscroll-behavior: none !important;
       touch-action: pan-x !important;
+      overflow: visible !important;
+      max-width: 100vw !important;
+      clip-path: none !important;
+      clip: auto !important;
     }
 
     /* Note : on ne masque PLUS les boutons d'action (like, comment,
@@ -1198,57 +1208,45 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         injectExploreEmptyState();
         // Premier full scan : updateRouteMarker + tous les scanners
         // (sponsored, suggestions, reels, explore, DM, etc.).
-        // updateRouteMarker appelera syncReelLockTouchHandler en fonction
-        // de la route, on n'a plus besoin d'un install initial.
         fullScan();
 
-        var observer = new MutationObserver(function(mutations) {
-          // On déclenche un fullScan debounce au lieu de scanner chaque mutation
-          // individuellement — plus robuste contre les ajouts hors-scope.
-          scheduleScan();
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
+        // ------------------------------------------------------------------
+        // STRATEGIE DE SCAN — POLLING FIXE
+        // ------------------------------------------------------------------
+        // On a essaye (dans l'ordre) :
+        //  1. rAF leading edge -> scans a chaque frame, saturait le main
+        //     thread pendant un scroll
+        //  2. Trailing debounce 200ms -> mieux, mais les mutations continues
+        //     d'Instagram empechaient les scans de se declencher ou les
+        //     rendaient irreguliers
+        //  3. Leading-edge + throttle 300ms -> toujours jank car le
+        //     MutationObserver lui-meme est cher quand Instagram tire
+        //     des mutations en continu (stories timers, typing indicators,
+        //     animations d'actions)
+        //
+        // Version finale : on supprime completement le MutationObserver et
+        // on remplace par un setInterval(fullScan, 500). Zero overhead au
+        // niveau mutation, comportement prévisible, scans limites a 2/sec.
+        // Trade-off : un nouveau post ajoute par Instagram peut apparaitre
+        // ~500ms avant d'etre filtre. Acceptable vs. un scroll saccade.
+        // ------------------------------------------------------------------
+        setInterval(fullScan, 500);
 
-        // Check périodique pour les bandeaux qui apparaissent en différé
-        // et pour rafraichir le marqueur de route sur navigations SPA.
+        // Check périodique separement pour les bandeaux qui apparaissent
+        // en différé (install app) et le marqueur de route sur navigations
+        // SPA. Frequence plus basse car ces operations sont plus legeres.
         setInterval(function() {
           closeOpenInAppBanners();
           updateRouteMarker();
         }, 1500);
 
-        post({ type: 'ready', platform: 'instagram' });
-      }
-
-      // Scheduler : leading-edge avec throttle a 300ms minimum entre
-      // scans. Garantit que fullScan() ne tourne JAMAIS plus d'une fois
-      // tous les 300ms, quelle que soit la frequence des mutations
-      // qu'Instagram declenche pendant un scroll.
-      //
-      // Historique des versions :
-      //  - rAF leading (~16ms) : relancait un scan a presque chaque
-      //    frame pendant un scroll, saturait le main thread.
-      //  - trailing debounce 200ms : meilleur, mais les mutations
-      //    continues (typing indicator, timers Instagram) pouvaient
-      //    empecher tout scan de se declencher, ou au contraire
-      //    clignoter au moindre break de mutation.
-      //  - version actuelle (leading + throttle 300ms) : premier
-      //    mutation = scan immediat (avec un petit delai de 50ms pour
-      //    batcher les mutations d'une meme frame), puis ignore toutes
-      //    les mutations suivantes pendant 300ms. C'est le compromis
-      //    classique throttle qu'utilisent la plupart des libs.
-      var scanTimer = null;
-      var lastScanEndTime = 0;
-      var SCAN_MIN_INTERVAL = 300;
-      function scheduleScan() {
-        if (scanTimer) { return; }
-        var now = Date.now();
-        var elapsed = now - lastScanEndTime;
-        var delay = elapsed >= SCAN_MIN_INTERVAL ? 50 : (SCAN_MIN_INTERVAL - elapsed);
-        scanTimer = setTimeout(function() {
-          scanTimer = null;
+        // Re-scan immediat sur navigation (popstate) pour ne pas attendre
+        // le prochain tick du poll.
+        window.addEventListener('popstate', function() {
           fullScan();
-          lastScanEndTime = Date.now();
-        }, delay);
+        });
+
+        post({ type: 'ready', platform: 'instagram' });
       }
 
       if (document.body) {
