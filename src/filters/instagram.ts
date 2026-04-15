@@ -140,40 +140,106 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     `
       : ''}
 
-    /* Classe universelle utilisée par notre JS pour masquer un élément */
+    /* -----------------------------------------------------------------
+       Classes universelles de masquage
+       -----------------------------------------------------------------
+       On a DEUX classes de masquage, et il faut bien comprendre la
+       difference pour ne pas recasser l'infinite scroll d'Instagram :
+
+       .authentique-hidden — masquage STRICT (display: none).
+         A utiliser pour les elements qu'il faut sortir completement
+         du flow : pop-ups, bandeaux "Ouvrir dans l'app", cards Reels
+         en fullscreen quand on veut que le swipe avance au Reel
+         suivant, dialogues modaux, etc.
+
+       .authentique-hidden-flow — masquage PRESERVANT LE FLOW.
+         A utiliser pour les posts du fil et les cards de suggestion
+         *a l'interieur* du feed. Instagram attache un IntersectionObserver
+         sur les items du feed pour declencher le chargement paresseux
+         des posts suivants. Si on les marque display:none, l'observer
+         ne les voit jamais entrer dans le viewport et l'infinite scroll
+         se bloque avec un grand blanc apres quelques posts. En les
+         reduisant a height: 0 + opacity: 0 on les rend visuellement
+         invisibles tout en gardant l'element dans le layout, l'observer
+         continue a firer, et le feed continue a charger normalement.
+       ----------------------------------------------------------------- */
     .authentique-hidden {
       display: none !important;
     }
 
-    /* Overlay "En attente d'un Reel de tes amis" sur la page /reels/.
-       On injecte le div une seule fois au démarrage, et on utilise une
-       classe sur <body> pour le montrer uniquement quand on est sur la
-       route Reels. Le z-index 0 fait qu'il est toujours *derrière* les
-       vraies cards Reels — il n'apparaît à l'utilisateur que lorsqu'il
-       n'y a plus aucune card visible (tous les Reels en viewport sont
-       masqués par notre filtre "Suivre"). */
+    .authentique-hidden-flow {
+      opacity: 0 !important;
+      height: 0 !important;
+      min-height: 0 !important;
+      max-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border-width: 0 !important;
+      overflow: hidden !important;
+      pointer-events: none !important;
+    }
+
+    /* -----------------------------------------------------------------
+       Overlay "En attente d'un Reel de tes amis" sur /reels/
+       -----------------------------------------------------------------
+       L'overlay est injecte une seule fois au demarrage dans le body
+       et reste dans le DOM en permanence. Il est cache par defaut et
+       ne devient visible que via la classe body.authentique-on-reels
+       posee par notre JS quand on est sur la route Reels feed.
+
+       Historique : cet overlay etait auparavant fullscreen avec un
+       fond noir opaque. Probleme : il recouvrait aussi la barre de
+       navigation interne d'Instagram (home, search, reels, notifs,
+       profile) et bloquait la navigation quand aucun Reel d'ami
+       n'etait disponible. On l'a donc retransforme en une petite
+       pastille centree avec fond translucide, pour qu'Instagram garde
+       le controle de son chrome (top bar + bottom nav).
+       ----------------------------------------------------------------- */
     .authentique-reels-waiting {
       display: none;
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 0;
-      align-items: center;
-      justify-content: center;
-      background: #000000;
-      color: rgba(255, 255, 255, 0.7);
+      left: 50%;
+      top: 45%;
+      transform: translate(-50%, -50%);
+      padding: 12px 20px;
+      background: rgba(0, 0, 0, 0.65);
+      color: rgba(255, 255, 255, 0.92);
+      border-radius: 10px;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 15px;
-      line-height: 1.5;
+      font-size: 14px;
+      line-height: 1.4;
       text-align: center;
-      padding: 0 40px;
       pointer-events: none;
+      z-index: 0;
       letter-spacing: 0.2px;
+      max-width: 80%;
     }
     body.authentique-on-reels .authentique-reels-waiting {
-      display: flex;
+      display: block;
+    }
+
+    /* -----------------------------------------------------------------
+       Lock vertical swipe sur un Reel individuel
+       -----------------------------------------------------------------
+       Quand un Reel est ouvert depuis la messagerie ou depuis un lien
+       partage, Instagram le sert sur /reel/<id>/ (URL singulier, sans
+       le "s"), et un swipe vertical fait basculer dans le fil
+       algorithmique /reels/ juste apres. C'est exactement ce qu'on
+       veut eviter : l'utilisateur doit pouvoir regarder le Reel
+       partage et le fermer, pas tomber dans l'algo.
+
+       La classe body.authentique-reel-locked est posee par le JS du
+       commit 3 sur le pathname /reel/:id uniquement. Elle bloque
+       l'overflow vertical du body et du <main>, ce qui tue le scroll
+       qu'Instagram utilise pour sa snap-pagination entre Reels
+       successifs. Les taps (play/pause, like) et les gestes
+       horizontaux (swipe-right pour revenir) restent actifs.
+       ----------------------------------------------------------------- */
+    body.authentique-reel-locked,
+    body.authentique-reel-locked main,
+    body.authentique-reel-locked [role="main"] {
+      overflow: hidden !important;
+      overscroll-behavior: none !important;
     }
   `;
 
