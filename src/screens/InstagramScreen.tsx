@@ -18,7 +18,7 @@ export function InstagramScreen() {
   const filters = useMemo(() => buildInstagramFilters(prefs), [prefs]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.container}>
         <FilteredWebView
           uri="https://www.instagram.com/"

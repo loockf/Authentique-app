@@ -3,21 +3,23 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { InstagramScreen } from '../screens/InstagramScreen';
 import { FacebookScreen } from '../screens/FacebookScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
-import { colors } from '../theme/colors';
+import { FloatingNav } from '../components/FloatingNav';
 
 /**
- * Navigation principale : 3 onglets en bas d'écran.
+ * Navigation principale — Authentique utilise un Tab.Navigator de
+ * react-navigation comme moteur de navigation, mais SANS la tab bar
+ * par defaut. A la place, on fournit notre propre composant custom
+ * <FloatingNav /> via le prop `tabBar`, qui est un cercle flottant
+ * draggable (voir src/components/FloatingNav.tsx).
  *
- * Version simplifiée : on laisse react-navigation utiliser son tab bar par
- * défaut pour éviter les erreurs de codegen côté New Architecture qui
- * surviennent dès qu'on customise trop le `tabBarStyle` ou qu'on passe
- * un `tabBarIcon` personnalisé. Le style minimaliste voulu sera réappliqué
- * une fois que l'app tournera de façon stable.
- *
- * `freezeOnBlur: false` désactive l'enveloppe `<Freeze>` de
- * react-native-screens pour les onglets inactifs, ce qui évite un bug
- * connu "expected dynamic type 'boolean', but had type 'string'" lorsque
- * Freeze + Animated.View se rencontrent sur la New Architecture.
+ * Ca permet de garder tous les benefices de react-navigation :
+ *   - gestion du cycle de vie des ecrans (lazy: false, freezeOnBlur: false)
+ *   - route state reactive
+ *   - deep linking si un jour on en a besoin
+ * tout en rendant zero chrome visible en bas de l'ecran. Les WebViews
+ * Instagram et Facebook occupent ainsi 100% de la hauteur, sans etre
+ * grignotees par une barre d'onglets qui denatuferait l'experience
+ * de lecture.
  */
 
 type TabParamList = {
@@ -36,9 +38,8 @@ export function RootTabs() {
         headerShown: false,
         freezeOnBlur: false,
         lazy: false,
-        tabBarActiveTintColor: colors.tabActive,
-        tabBarInactiveTintColor: colors.tabInactive,
       }}
+      tabBar={(props) => <FloatingNav {...props} />}
     >
       <Tab.Screen name="Instagram" component={InstagramScreen} />
       <Tab.Screen name="Facebook" component={FacebookScreen} />

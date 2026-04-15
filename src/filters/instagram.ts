@@ -98,6 +98,24 @@ const FOLLOW_NEEDLES = ['Suivre', 'Follow'] as const;
 
 export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
   const css = `
+    /* -----------------------------------------------------------------
+       Fond du document — masque le flash blanc pendant un swipe entre
+       tabs internes Instagram
+       -----------------------------------------------------------------
+       Quand on swipe horizontalement entre les tabs Instagram (home ->
+       search -> reels...) depuis le bord de l'ecran, Instagram anime le
+       contenu actuel qui glisse et charge le contenu suivant en parallele.
+       Pendant cette transition, la zone "vide" derriere les ecrans est
+       rendue dans la couleur de fond du document, qui est blanche par
+       defaut. Resultat : un flash blanc bien visible. En forcant le fond
+       a la couleur de l'app Instagram en mode sombre (#000), on rend le
+       flash invisible, la transition semble parfaitement fluide.
+       Cette regle n'affecte rien d'autre : les contenus du feed ont
+       leurs propres fonds. */
+    html, body {
+      background-color: #000000 !important;
+    }
+
     /* Pop-ups "Ouvrir dans l'application" / "Installer l'app" */
     div[role="dialog"][aria-label*="app" i],
     div[role="dialog"][aria-label*="application" i],

@@ -48,7 +48,7 @@ export function SettingsScreen() {
   const { prefs, setPref, hiddenCount } = useFilters();
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Authentique</Text>
         <Text style={styles.tagline}>Juste tes amis. Rien d'autre.</Text>

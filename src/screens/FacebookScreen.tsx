@@ -17,7 +17,7 @@ export function FacebookScreen() {
   const filters = useMemo(() => buildFacebookFilters(prefs), [prefs]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.container}>
         <FilteredWebView
           uri="https://www.facebook.com/feeds/friends/"
