@@ -546,16 +546,20 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // lazy-load des posts suivants. display:none casserait l'infinite
         // scroll et creerait un grand blanc en bas de feed.
         //
-        // Caching : on ne scanne QUE les articles qui n'ont pas encore
-        // ete vus (pas d'attribut data-authentique-scanned). Une fois
-        // marque, on ne revient plus dessus meme si son contenu change.
+        // IMPORTANT : PAS de caching par attribut ici. Instagram
+        // lazy-load le label "Sponsorise" sous les posts APRES leur
+        // premiere apparition dans le DOM. Si on marque l'article
+        // comme "scanne" lors du premier tick (avant que le label
+        // soit injecte), le tick suivant le skip via le
+        // :not([data-authentique-scanned]) et on rate le label
+        // pour toujours. On re-scanne les articles a chaque tick —
+        // ils sont peu nombreux (< 50), le cout est negligeable.
         var articles = document.querySelectorAll(
-          'article:not(.authentique-hidden):not(.authentique-hidden-flow):not([' + SCANNED_ATTR + ']), ' +
-          '[role="article"]:not(.authentique-hidden):not(.authentique-hidden-flow):not([' + SCANNED_ATTR + '])'
+          'article:not(.authentique-hidden):not(.authentique-hidden-flow), ' +
+          '[role="article"]:not(.authentique-hidden):not(.authentique-hidden-flow)'
         );
         for (var i = 0; i < articles.length; i++) {
           var art = articles[i];
-          art.setAttribute(SCANNED_ATTR, '1');
           if (containsText(art, SPONSORED_NEEDLES) || containsAttributeText(art, SPONSORED_NEEDLES)) {
             hideInFlow(art, 'sponsored');
           }
@@ -564,16 +568,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function scanSuggestions() {
         if (!prefs.hideSuggestions) { return; }
-        // Caching : mêmes raisons que scanSponsored. Les headings sont
-        // stables, une fois checke on ne revient pas dessus.
-        var headings = document.querySelectorAll(
-          'h2:not([' + SCANNED_ATTR + ']), ' +
-          'h3:not([' + SCANNED_ATTR + ']), ' +
-          'h4:not([' + SCANNED_ATTR + '])'
-        );
+        // Comme scanSponsored : pas de caching. Les headings
+        // "Suggestions pour vous" peuvent apparaitre apres le premier
+        // render initial quand Instagram insere des sections
+        // algorithmiques entre des posts deja lus.
+        var headings = document.querySelectorAll('h2, h3, h4');
         for (var j = 0; j < headings.length; j++) {
           var h = headings[j];
-          h.setAttribute(SCANNED_ATTR, '1');
+          // Skip si deja masque
+          if (h.classList.contains('authentique-hidden') ||
+              h.classList.contains('authentique-hidden-flow')) { continue; }
           var t = (h.textContent || '').trim();
           if (!t || t.length > 80) { continue; }
           var matched = false;
