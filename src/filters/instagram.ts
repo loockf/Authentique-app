@@ -75,6 +75,37 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     .authentique-hidden {
       display: none !important;
     }
+
+    /* Overlay "En attente d'un Reel de tes amis" sur la page /reels/.
+       On injecte le div une seule fois au démarrage, et on utilise une
+       classe sur <body> pour le montrer uniquement quand on est sur la
+       route Reels. Le z-index 0 fait qu'il est toujours *derrière* les
+       vraies cards Reels — il n'apparaît à l'utilisateur que lorsqu'il
+       n'y a plus aucune card visible (tous les Reels en viewport sont
+       masqués par notre filtre "Suivre"). */
+    .authentique-reels-waiting {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 0;
+      align-items: center;
+      justify-content: center;
+      background: #000000;
+      color: rgba(255, 255, 255, 0.7);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+      text-align: center;
+      padding: 0 40px;
+      pointer-events: none;
+      letter-spacing: 0.2px;
+    }
+    body.authentique-on-reels .authentique-reels-waiting {
+      display: flex;
+    }
   `;
 
   // Les préférences sont sérialisées dans le script pour qu'il puisse décider
@@ -202,6 +233,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         "Use the app",
         "Get the app",
       ];
+      var FOLLOW_NEEDLES = ['Suivre', 'Follow'];
 
       /**
        * Scan global — on cherche à chaque fois dans tout le document, pas
@@ -270,6 +302,106 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        * Instagram l'injecte en <div role="dialog"> ou en bannière top-fixed.
        * On scan tout élément visible qui contient un des textes cibles.
        */
+      /**
+       * Filtrage contextuel des Reels en fullscreen (option B de l'utilisateur).
+       *
+       * Philosophie : Authentique ne stocke et ne scrape AUCUNE liste
+       * d'abonnements. On se contente de regarder ce qu'Instagram affiche
+       * deja a cote de chaque Reel :
+       *
+       *   - Si Instagram montre un bouton "Suivre" / "Follow" pres du
+       *     pseudo, alors ce n'est pas un compte qu'on suit, donc on
+       *     masque le Reel.
+       *   - Si le bouton n'y est pas, c'est que le compte est deja suivi
+       *     (ou qu'Instagram ne nous le propose plus) et on le garde.
+       *
+       * Aucune donnee stockee, aucune requete reseau declenchee par nous,
+       * aucun code reutilisable pour exfiltrer une liste d'amis.
+       *
+       * Fail-safe : si Instagram change son DOM et n'expose plus le bouton
+       * "Suivre" au meme endroit, on echoue en douceur -> tous les Reels
+       * restent visibles (comportement par defaut avant la feature).
+       */
+      function isReelsRoute() {
+        var p = location.pathname || '';
+        return p.indexOf('/reels') === 0 || p.indexOf('/reel/') === 0;
+      }
+
+      function updateRouteMarker() {
+        if (!document.body) { return; }
+        if (isReelsRoute()) {
+          document.body.classList.add('authentique-on-reels');
+        } else {
+          document.body.classList.remove('authentique-on-reels');
+        }
+      }
+
+      /**
+       * Remonte du bouton "Suivre" jusqu'au conteneur de Reel le plus proche.
+       * Un Reel fullscreen occupe typiquement toute la hauteur du viewport,
+       * donc on cherche un ancetre dont offsetHeight >= 70% de window.innerHeight.
+       */
+      function findReelCard(node) {
+        var minHeight = Math.max(300, window.innerHeight * 0.6);
+        var el = node;
+        while (el && el !== document.body) {
+          if (el.tagName === 'ARTICLE') { return el; }
+          var role = el.getAttribute && el.getAttribute('role');
+          if (role === 'article') { return el; }
+          if (el.offsetHeight >= minHeight && el.parentElement !== document.body) {
+            return el;
+          }
+          el = el.parentElement;
+        }
+        return null;
+      }
+
+      /** Est-ce que l'element donne (ou un de ses descendants proches)
+          expose un bouton "Suivre" / "Follow" ? */
+      function hasFollowButton(root) {
+        if (!root) { return false; }
+        var candidates = root.querySelectorAll('button, [role="button"], a, span, div');
+        for (var i = 0; i < candidates.length; i++) {
+          var el = candidates[i];
+          // Eviter les blocs tres larges qui contiendraient le bouton en plus
+          // du reste : on ne prend que les elements "feuilles" ou petits.
+          if (el.children.length > 3) { continue; }
+          var t = (el.textContent || '').trim();
+          if (!t || t.length > 20) { continue; }
+          for (var j = 0; j < FOLLOW_NEEDLES.length; j++) {
+            if (t === FOLLOW_NEEDLES[j]) { return true; }
+          }
+          var label = el.getAttribute && (el.getAttribute('aria-label') || '');
+          if (label) {
+            for (var k = 0; k < FOLLOW_NEEDLES.length; k++) {
+              if (label === FOLLOW_NEEDLES[k]) { return true; }
+            }
+          }
+        }
+        return false;
+      }
+
+      function scanReelsFullscreen() {
+        if (!isReelsRoute()) { return; }
+        // On cherche tous les boutons "Suivre" visibles dans la page et on
+        // remonte chacun jusqu'a son reel card pour masquer le card entier.
+        var all = document.querySelectorAll('button, [role="button"], span, div');
+        var visited = new Set ? new Set() : null;
+        for (var i = 0; i < all.length; i++) {
+          var el = all[i];
+          if (el.children && el.children.length > 3) { continue; }
+          var t = (el.textContent || '').trim();
+          if (t !== 'Suivre' && t !== 'Follow') { continue; }
+          var card = findReelCard(el);
+          if (!card || card.classList.contains('authentique-hidden')) { continue; }
+          if (visited) {
+            if (visited.has(card)) { continue; }
+            visited.add(card);
+          }
+          hide(card, 'reel-non-ami');
+        }
+      }
+
       function closeOpenInAppBanners() {
         var candidates = document.querySelectorAll(
           'div[role="dialog"]:not(.authentique-hidden), ' +
@@ -324,11 +456,29 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function fullScan() {
         if (!document.body) { return; }
+        updateRouteMarker();
         scanSponsored();
         scanSuggestions();
         scanReels();
         scanLikeCounts();
+        scanReelsFullscreen();
         closeOpenInAppBanners();
+      }
+
+      /**
+       * Injecte l'overlay "En attente d'un Reel de tes amis..." dans
+       * le body. Le div existe en permanence mais reste cache par defaut
+       * via CSS. La classe body.authentique-on-reels (posee par
+       * updateRouteMarker) le rend visible seulement quand on est sur
+       * /reels/ et qu'aucune card Reel n'est affichee au-dessus.
+       */
+      function injectReelsWaitingOverlay() {
+        if (document.getElementById('authentique-reels-waiting')) { return; }
+        var overlay = document.createElement('div');
+        overlay.id = 'authentique-reels-waiting';
+        overlay.className = 'authentique-reels-waiting';
+        overlay.textContent = "En attente d'un Reel de tes amis...";
+        (document.body || document.documentElement).appendChild(overlay);
       }
 
       // --- Hot reload des préférences --------------------------------------
@@ -343,6 +493,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // --- Démarrage -------------------------------------------------------
 
       function start() {
+        injectReelsWaitingOverlay();
         fullScan();
         enforceFollowingFeed();
 
@@ -353,8 +504,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
-        // Check périodique pour les bandeaux qui apparaissent en différé.
-        setInterval(closeOpenInAppBanners, 1500);
+        // Check périodique pour les bandeaux qui apparaissent en différé
+        // et pour rafraichir le marqueur de route sur navigations SPA.
+        setInterval(function() {
+          closeOpenInAppBanners();
+          updateRouteMarker();
+        }, 1500);
 
         post({ type: 'ready', platform: 'instagram' });
       }
