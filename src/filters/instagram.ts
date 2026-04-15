@@ -261,7 +261,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       var prefs = ${serializedPrefs};
       var hiddenCount = 0;
-      var followingEnforced = false;
 
       // --- Helpers ---------------------------------------------------------
 
@@ -276,6 +275,26 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       function hide(el, reason) {
         if (!el || el.classList.contains('authentique-hidden')) { return false; }
         el.classList.add('authentique-hidden');
+        el.setAttribute('data-authentique-reason', reason);
+        hiddenCount++;
+        post({ type: 'hidden-count', count: hiddenCount });
+        return true;
+      }
+
+      /**
+       * Masquage preservant le flow — a utiliser pour les items du feed.
+       * Contrairement a hide() qui utilise display:none, cette variante
+       * pose la classe .authentique-hidden-flow qui reduit l'element a
+       * height:0 + opacity:0 tout en le laissant dans le layout. Ca permet
+       * a l'IntersectionObserver d'Instagram de continuer a tirer sur les
+       * items du feed et au lazy-load de fonctionner. Sans ca, le feed
+       * tombe sur un grand blanc apres quelques posts masques.
+       */
+      function hideInFlow(el, reason) {
+        if (!el) { return false; }
+        if (el.classList.contains('authentique-hidden')) { return false; }
+        if (el.classList.contains('authentique-hidden-flow')) { return false; }
+        el.classList.add('authentique-hidden-flow');
         el.setAttribute('data-authentique-reason', reason);
         hiddenCount++;
         post({ type: 'hidden-count', count: hiddenCount });
@@ -350,11 +369,18 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        */
       function scanSponsored() {
         if (!prefs.hideAds) { return; }
-        var articles = document.querySelectorAll('article:not(.authentique-hidden), [role="article"]:not(.authentique-hidden)');
+        // Les posts du fil sont masques avec hideInFlow() pour que
+        // l'IntersectionObserver d'Instagram continue a declencher le
+        // lazy-load des posts suivants. display:none casserait l'infinite
+        // scroll et creerait un grand blanc en bas de feed.
+        var articles = document.querySelectorAll(
+          'article:not(.authentique-hidden):not(.authentique-hidden-flow), ' +
+          '[role="article"]:not(.authentique-hidden):not(.authentique-hidden-flow)'
+        );
         for (var i = 0; i < articles.length; i++) {
           var art = articles[i];
           if (containsText(art, SPONSORED_NEEDLES) || containsAttributeText(art, SPONSORED_NEEDLES)) {
-            hide(art, 'sponsored');
+            hideInFlow(art, 'sponsored');
           }
         }
       }
@@ -374,7 +400,9 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           }
           if (matched) {
             var card = findPostAncestor(h);
-            if (card) { hide(card, 'suggestion'); }
+            // Meme raison que scanSponsored : on garde l'element dans le
+            // flow pour ne pas casser l'IntersectionObserver.
+            if (card) { hideInFlow(card, 'suggestion'); }
           }
         }
       }
@@ -430,56 +458,106 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        * "Suivre" au meme endroit, on echoue en douceur -> tous les Reels
        * restent visibles (comportement par defaut avant la feature).
        */
-      function isReelsRoute() {
+      // --- Route detection granulaire ------------------------------------
+      // Instagram distingue plusieurs routes que notre filtre traite
+      // differemment. On les expose via des helpers separes pour eviter
+      // qu'une logique soit appliquee a la mauvaise page (p.ex. le lock
+      // vertical ne doit PAS s'appliquer a /reels/ qui est le fil
+      // algorithmique que l'utilisateur a choisi d'ouvrir).
+      function isReelsFeedRoute() {
+        // /reels/ (plural) = fil algorithmique swipable entre Reels
         var p = location.pathname || '';
-        return p.indexOf('/reels') === 0 || p.indexOf('/reel/') === 0;
+        return p.indexOf('/reels') === 0;
+      }
+      function isIndividualReelRoute() {
+        // /reel/<id>/ (singulier) = un Reel isole, typiquement ouvert
+        // depuis un partage (DM, lien), qu'on veut pouvoir regarder
+        // sans glisser dans le fil algorithmique qui suit.
+        var p = location.pathname || '';
+        return p.indexOf('/reel/') === 0;
+      }
+      function isExploreRoute() {
+        // /explore/ = loupe Instagram (grille "decouvrir" + recherche)
+        var p = location.pathname || '';
+        return p.indexOf('/explore') === 0;
+      }
+      function isExploreSearchActive() {
+        // Une recherche est active quand l'URL contient /search/ ou q=,
+        // ou quand l'input de recherche a une valeur non vide.
+        if (!isExploreRoute()) { return false; }
+        var p = location.pathname || '';
+        if (p.indexOf('/search') !== -1) { return true; }
+        var q = location.search || '';
+        if (q.indexOf('q=') !== -1) { return true; }
+        var input = findExploreSearchInput();
+        return !!(input && input.value && input.value.length > 0);
+      }
+      function isDirectRoute() {
+        // /direct/... = messagerie (inbox ou thread)
+        var p = location.pathname || '';
+        return p.indexOf('/direct') === 0;
+      }
+
+      function findExploreSearchInput() {
+        return document.querySelector('input[type="search"]') ||
+               document.querySelector('input[type="text"][aria-label*="Rech" i]') ||
+               document.querySelector('input[type="text"][aria-label*="Search" i]') ||
+               document.querySelector('input[type="text"][placeholder*="Rech" i]') ||
+               document.querySelector('input[type="text"][placeholder*="Search" i]');
       }
 
       function updateRouteMarker() {
         if (!document.body) { return; }
-        if (isReelsRoute()) {
-          document.body.classList.add('authentique-on-reels');
-        } else {
-          document.body.classList.remove('authentique-on-reels');
-        }
+        // L'overlay "En attente d'un Reel de tes amis..." n'est pertinent
+        // que sur le fil /reels/ (plural). Sur /reel/:id on laisse l'UI
+        // normale et on se contente de lock le swipe vertical.
+        document.body.classList.toggle('authentique-on-reels', isReelsFeedRoute());
+        // Le lock du swipe vertical est applique UNIQUEMENT sur la route
+        // Reel individuel pour ne pas casser le fil algorithmique de
+        // /reels/ qui reste swipable par choix de l'utilisateur.
+        document.body.classList.toggle('authentique-reel-locked', isIndividualReelRoute());
       }
 
-      /**
-       * Remonte du bouton "Suivre" jusqu'au conteneur de Reel le plus proche.
-       * Un Reel fullscreen occupe typiquement toute la hauteur du viewport,
-       * donc on cherche un ancetre dont offsetHeight >= 70% de window.innerHeight.
-       */
-      function findReelCard(node) {
-        var minHeight = Math.max(300, window.innerHeight * 0.6);
-        var el = node;
-        while (el && el !== document.body) {
-          if (el.tagName === 'ARTICLE') { return el; }
-          var role = el.getAttribute && el.getAttribute('role');
-          if (role === 'article') { return el; }
-          if (el.offsetHeight >= minHeight && el.parentElement !== document.body) {
-            return el;
-          }
-          el = el.parentElement;
-        }
-        return null;
+      // --- Reels card detection (filtre contextuel "Suivre") -------------
+      //
+      // Version stricte : on ne cherche plus un bouton "Suivre" dans tout
+      // le document et on ne remonte plus vers un ancetre "gros". On
+      // commence par lister les cards via selecteurs strictes, puis on
+      // verifie, dans le sous-arbre de chaque card, si elle contient un
+      // vrai bouton (tagName BUTTON ou role="button") avec textContent
+      // strictement egal a "Suivre"/"Follow". C'est le fail-safe critique :
+      // si Instagram change de structure, on trouve zero card et on ne
+      // masque rien au lieu de tout masquer (comportement precedent).
+      function findReelCards() {
+        // Selecteurs stricts, dans l'ordre de preference.
+        var strict = document.querySelectorAll(
+          'main article:not(.authentique-hidden), ' +
+          '[role="main"] article:not(.authentique-hidden), ' +
+          'main [role="article"]:not(.authentique-hidden), ' +
+          '[role="main"] [role="article"]:not(.authentique-hidden)'
+        );
+        if (strict.length > 0) { return strict; }
+        // Fallback tres conservateur : on accepte tous les <article>
+        // visibles dans le body, sans jamais remonter vers un div
+        // generique parent. Si pas d'article du tout, on rend null
+        // et scanReelsFullscreen ne hide rien.
+        var fallback = document.querySelectorAll('article:not(.authentique-hidden), [role="article"]:not(.authentique-hidden)');
+        return fallback;
       }
 
-      /** Est-ce que l'element donne (ou un de ses descendants proches)
-          expose un bouton "Suivre" / "Follow" ? */
-      function hasFollowButton(root) {
-        if (!root) { return false; }
-        var candidates = root.querySelectorAll('button, [role="button"], a, span, div');
-        for (var i = 0; i < candidates.length; i++) {
-          var el = candidates[i];
-          // Eviter les blocs tres larges qui contiendraient le bouton en plus
-          // du reste : on ne prend que les elements "feuilles" ou petits.
-          if (el.children.length > 3) { continue; }
-          var t = (el.textContent || '').trim();
-          if (!t || t.length > 20) { continue; }
+      function cardHasFollowButton(card) {
+        if (!card) { return false; }
+        // Seuls les vrais elements interactifs sont consideres : un
+        // simple <span>Suivre</span> ne suffit plus. Meta utilise
+        // typiquement <div role="button"> ou <button> pour ce bouton.
+        var buttons = card.querySelectorAll('button, [role="button"]');
+        for (var i = 0; i < buttons.length; i++) {
+          var btn = buttons[i];
+          var t = (btn.textContent || '').trim();
           for (var j = 0; j < FOLLOW_NEEDLES.length; j++) {
             if (t === FOLLOW_NEEDLES[j]) { return true; }
           }
-          var label = el.getAttribute && (el.getAttribute('aria-label') || '');
+          var label = btn.getAttribute && btn.getAttribute('aria-label');
           if (label) {
             for (var k = 0; k < FOLLOW_NEEDLES.length; k++) {
               if (label === FOLLOW_NEEDLES[k]) { return true; }
@@ -490,23 +568,115 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       function scanReelsFullscreen() {
-        if (!isReelsRoute()) { return; }
-        // On cherche tous les boutons "Suivre" visibles dans la page et on
-        // remonte chacun jusqu'a son reel card pour masquer le card entier.
-        var all = document.querySelectorAll('button, [role="button"], span, div');
-        var visited = new Set ? new Set() : null;
-        for (var i = 0; i < all.length; i++) {
-          var el = all[i];
-          if (el.children && el.children.length > 3) { continue; }
-          var t = (el.textContent || '').trim();
-          if (t !== 'Suivre' && t !== 'Follow') { continue; }
-          var card = findReelCard(el);
-          if (!card || card.classList.contains('authentique-hidden')) { continue; }
-          if (visited) {
-            if (visited.has(card)) { continue; }
-            visited.add(card);
+        // Seulement sur le fil /reels/ (algorithmique), pas sur /reel/:id
+        // (un Reel individuel qu'on traite via le lock swipe vertical).
+        if (!isReelsFeedRoute()) { return; }
+        var cards = findReelCards();
+        for (var i = 0; i < cards.length; i++) {
+          var card = cards[i];
+          if (cardHasFollowButton(card)) {
+            // Pour les Reels on veut que le swipe avance au suivant, donc
+            // on utilise hide() (display:none) et pas hideInFlow().
+            hide(card, 'reel-non-ami');
           }
-          hide(card, 'reel-non-ami');
+        }
+      }
+
+      // --- Filtre Explore (loupe Instagram) ------------------------------
+      //
+      // Idle (pas de recherche en cours) : on masque tout le grid de
+      // contenu suggere pour ne garder visible que la barre de recherche.
+      // Search (recherche en cours) : on masque uniquement les liens
+      // /reel/ dans les resultats, on garde les comptes et les posts.
+      function scanExplore() {
+        if (!isExploreRoute()) { return; }
+        var searchActive = isExploreSearchActive();
+        if (!searchActive) {
+          hideExploreIdleGrid();
+        } else {
+          hideReelsInSearchResults();
+        }
+      }
+
+      function hideExploreIdleGrid() {
+        // On identifie la grille en trouvant tous les liens vers /p/ ou
+        // /reel/ dans le main, puis en remontant vers leur ancetre
+        // commun raisonnable (qui n'est pas main lui-meme).
+        var main = document.querySelector('main') || document.querySelector('[role="main"]');
+        if (!main) { return; }
+        var links = main.querySelectorAll('a[href^="/p/"], a[href^="/reel/"]');
+        if (links.length === 0) { return; }
+        // On se contente de masquer individuellement chaque lien : pas
+        // besoin de chercher un gros conteneur (risque de false positive).
+        for (var i = 0; i < links.length; i++) {
+          var link = links[i];
+          if (link.classList.contains('authentique-hidden')) { continue; }
+          // On remonte de 2 niveaux pour masquer la cellule de grille
+          // plutot que juste le lien, ce qui evite les cases vides.
+          var cell = link.parentElement && link.parentElement.parentElement ?
+                     link.parentElement.parentElement : link;
+          // Safety : ne jamais masquer main lui-meme.
+          if (cell === main || (cell.contains && cell.contains(main))) {
+            hide(link, 'explore-idle');
+          } else {
+            hide(cell, 'explore-idle');
+          }
+        }
+      }
+
+      function hideReelsInSearchResults() {
+        var reelLinks = document.querySelectorAll('a[href^="/reel/"]:not(.authentique-hidden), a[href*="/reel/"]:not(.authentique-hidden)');
+        for (var i = 0; i < reelLinks.length; i++) {
+          var link = reelLinks[i];
+          // Masquer la cellule de resultat, pas juste le lien
+          var cell = link.parentElement && link.parentElement.parentElement ?
+                     link.parentElement.parentElement : link;
+          hide(cell, 'reel-in-search');
+        }
+      }
+
+      // --- Filtre messagerie ---------------------------------------------
+      // Dans l'inbox Instagram, on masque les blocs de canaux suggeres
+      // et de contenu suggere, qui polluent l'espace entre les vrais
+      // threads de messages. On utilise du matching textuel sur les
+      // en-tetes typiques.
+      var DM_SUGGESTED_NEEDLES = [
+        'Canaux suggérés',
+        'Suggested channels',
+        'Canaux',
+        'Channels',
+        'Contenus suggérés',
+        'Suggested content',
+        'Suggestions de messages',
+        'Messages suggérés',
+      ];
+
+      function scanDirectSuggestions() {
+        if (!isDirectRoute()) { return; }
+        if (!prefs.hideSuggestions) { return; }
+        var headings = document.querySelectorAll('h2, h3, h4, span');
+        for (var i = 0; i < headings.length; i++) {
+          var h = headings[i];
+          var t = (h.textContent || '').trim();
+          if (!t || t.length > 60) { continue; }
+          var matched = false;
+          for (var j = 0; j < DM_SUGGESTED_NEEDLES.length; j++) {
+            if (t === DM_SUGGESTED_NEEDLES[j]) { matched = true; break; }
+          }
+          if (matched) {
+            // On remonte jusqu'a un conteneur de section : grand-parent
+            // ou arriere-grand-parent du heading. Pas de fallback vers
+            // main pour eviter de tout masquer.
+            var container = h.parentElement;
+            if (container && container.parentElement) { container = container.parentElement; }
+            if (container && container.parentElement) { container = container.parentElement; }
+            if (container && container !== document.body) {
+              var main = document.querySelector('main');
+              if (container !== main && !container.contains(main || document.body)) {
+                hide(container, 'dm-suggestion');
+              }
+            }
+          }
         }
       }
 
@@ -529,18 +699,39 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       /**
-       * Tente de basculer de "Pour vous" vers "Abonnements" au premier chargement.
-       * On ne le fait qu'une seule fois pour ne pas interférer si l'utilisateur
-       * choisit manuellement "Pour vous".
+       * Tente de basculer de "Pour vous" vers "Abonnements".
+       *
+       * Version renforcee : on retente au MAXIMUM 3 fois par route visitee
+       * (pour ne pas spammer des clics si l'utilisateur a deliberement
+       * choisi "Pour vous"), avec un cooldown de 2 secondes entre deux
+       * tentatives pour laisser le dropdown apparaitre. Si on est sur une
+       * autre route, on reset le compteur pour pouvoir re-tenter quand
+       * l'utilisateur revient sur le fil.
        */
+      var enforceAttempts = 0;
+      var enforceLastAttempt = 0;
+      var enforceLastRoute = '';
       function enforceFollowingFeed() {
-        if (followingEnforced) { return; }
+        var route = location.pathname || '';
+        if (route !== enforceLastRoute) {
+          enforceLastRoute = route;
+          enforceAttempts = 0;
+          enforceLastAttempt = 0;
+        }
+        if (enforceAttempts >= 3) { return; }
+        var now = Date.now();
+        if (now - enforceLastAttempt < 2000) { return; }
+
+        // On ne tente que sur la home du feed.
+        if (route !== '/' && route !== '') { return; }
+
         var allSpans = document.querySelectorAll('h1, h2, span, div[role="button"]');
         for (var i = 0; i < allSpans.length; i++) {
           var el = allSpans[i];
           var t = (el.textContent || '').trim();
           if (t === 'Pour vous' || t === 'For you' || t === 'Suggestions') {
-            followingEnforced = true;
+            enforceAttempts++;
+            enforceLastAttempt = now;
             var clickable = el.closest('[role="button"]') || el.parentElement;
             if (!clickable) { return; }
             try {
@@ -550,12 +741,15 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
                 for (var j = 0; j < options.length; j++) {
                   var ot = (options[j].textContent || '').trim();
                   if (ot === 'Abonnements' || ot === 'Following') {
-                    var target = options[j].closest('[role="menuitem"]') || options[j].closest('[role="option"]') || options[j].closest('[role="button"]') || options[j];
+                    var target = options[j].closest('[role="menuitem"]') ||
+                                 options[j].closest('[role="option"]') ||
+                                 options[j].closest('[role="button"]') ||
+                                 options[j];
                     if (target) { target.click(); }
                     break;
                   }
                 }
-              }, 350);
+              }, 400);
             } catch (e) {}
             return;
           }
@@ -570,7 +764,10 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         scanReels();
         scanLikeCounts();
         scanReelsFullscreen();
+        scanExplore();
+        scanDirectSuggestions();
         closeOpenInAppBanners();
+        enforceFollowingFeed();
       }
 
       /**
@@ -602,8 +799,9 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function start() {
         injectReelsWaitingOverlay();
+        // Premier full scan : appelle aussi enforceFollowingFeed() et
+        // tous les scanners (sponsored, suggestions, explore, DM, etc.).
         fullScan();
-        enforceFollowingFeed();
 
         var observer = new MutationObserver(function(mutations) {
           // On déclenche un fullScan debounce au lieu de scanner chaque mutation
