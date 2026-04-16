@@ -46,11 +46,12 @@
  *               et cacher les conteneurs des videos additionnelles
  *               (les Reels suivants rendus en dessous par Instagram).
  *   Alpha 2.6 — position:relative (echec, meme resultat que 2.4).
- *   Alpha 2.7 — nouvelle approche : injection d'un overlay noir
- *               "gap cover" positionne dynamiquement sous la video
- *               courante, jusqu'au bas du viewport. Les approches
- *               CSS (overflow, position:relative) ont echoue donc
- *               on couvre la zone physiquement. La barre de reponse
- *               (z-index eleve) reste visible par-dessus.
+ *   Alpha 2.7 — gap cover dynamique (echoue : barre reponse cachee).
+ *   Alpha 2.8 — approche "comme Instagram natif" : la video du Reel
+ *               est forcee a min-height: 100vh + object-fit: cover.
+ *               Elle remplit le viewport entier, plus de gap en bas.
+ *               Les elements UI (pseudo, boutons, barre de reponse)
+ *               sont superposes par Instagram naturellement. Retrait
+ *               du gap cover et des hacks overflow-y / position.
  */
-export const APP_VERSION = 'Alpha 2.7';
+export const APP_VERSION = 'Alpha 2.8';
