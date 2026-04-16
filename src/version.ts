@@ -34,9 +34,10 @@
  *   Alpha 1.5 — delai de confirmation ami (3 ticks ~1.5s).
  *   Alpha 1.6 — auto-skip (abandonne).
  *   Alpha 2.0 — onglet Reels bloque avec message philosophique.
- *               Suppression de toute la logique de detection
- *               d'amis, auto-skip, compteurs. L'onglet Reels est
- *               le territoire de Meta, Authentique ne le conquiert
- *               pas. Les Reels d'amis sont dans le fil d'actualite.
+ *   Alpha 2.1 — fix ecran noir sur Reel DM : retrait de span du
+ *               selecteur scanReelOverlaySuggestions, walk-up limite
+ *               a 2 niveaux, refus de cacher un conteneur > 70%
+ *               viewport. Ce fix existait dans 548dea9 mais avait
+ *               ete perdu au rollback vers 76cec01.
  */
-export const APP_VERSION = 'Alpha 2.0';
+export const APP_VERSION = 'Alpha 2.1';

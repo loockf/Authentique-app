@@ -1082,7 +1082,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       ];
       function scanReelOverlaySuggestions() {
         if (!isDMReelOverlayOpen()) { return; }
-        var headings = document.querySelectorAll('h2, h3, h4, [role="heading"], span');
+        // RESTRICTIF : on ne scanne que les vrais headings, PAS les
+        // span. L'ancienne version incluait span, ce qui matchait
+        // n'importe quel span avec texte "Suggestions" dans l'UI du
+        // Reel (p.ex. un label interne Instagram) — walk-up trop
+        // agressif → hide du reel modal entier → ecran noir.
+        var headings = document.querySelectorAll('h2, h3, h4, [role="heading"]');
         for (var i = 0; i < headings.length; i++) {
           var h = headings[i];
           if (h.classList.contains('authentique-hidden')) { continue; }
@@ -1094,15 +1099,20 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
             if (t === REEL_OVERLAY_SUGGEST_NEEDLES[j]) { matched = true; break; }
           }
           if (!matched) { continue; }
-          // Walk up un peu et hide le conteneur substantiel
+          // Walk up LIMITE a 2 niveaux max. L'ancienne version montait
+          // a 6 niveaux et finissait par capter le conteneur entier du
+          // Reel, causant l'ecran noir.
           var container = h.parentElement;
           var depth = 0;
-          while (container && container !== document.body && depth < 6) {
+          while (container && container !== document.body && depth < 2) {
             if (container.offsetHeight >= 100) { break; }
             container = container.parentElement;
             depth++;
           }
           if (container && container !== document.body) {
+            // Safety : refuser de cacher un conteneur qui fait plus de
+            // 70% du viewport — c'est probablement le Reel lui-meme.
+            if (container.offsetHeight > window.innerHeight * 0.7) { continue; }
             var mainEl = document.querySelector('main') || document.querySelector('[role="main"]');
             if (container !== mainEl && !(mainEl && container.contains(mainEl))) {
               hide(container, 'reel-overlay-suggestion');
