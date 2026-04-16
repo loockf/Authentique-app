@@ -305,6 +305,32 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        VERTICAL reste bloque pour empecher de tomber dans l'algo. */
 
     /* -----------------------------------------------------------------
+       Overlay "gap cover" pour les DM Reels
+       -----------------------------------------------------------------
+       Les tentatives CSS pour clipper le Reel suivant en dessous
+       (overflow-y: hidden, position: relative) ont toutes echoue,
+       probablement parce qu'Instagram utilise position: fixed sur ses
+       cards de Reel — ce qui les sort completement du flux et les
+       rend impossible a clipper par les ancetres.
+
+       Solution pragmatique : injecter un div noir dont la position
+       est ajustee dynamiquement en JS (sync via syncReelGapCover)
+       pour couvrir exactement la zone entre le bas de la video
+       courante et le bas du viewport. La barre de reponse d'Instagram
+       (position: fixed au bas avec z-index eleve) s'affiche naturel-
+       lement par-dessus. */
+    .authentique-reel-gap-cover {
+      display: none;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #000;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    /* -----------------------------------------------------------------
        Etat vide de la page Explore (loupe) en mode idle
        -----------------------------------------------------------------
        Quand l'utilisateur ouvre la loupe sans recherche active, on
@@ -689,6 +715,9 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // bloque les swipes verticaux — presence a meme d'eviter
         // l'overhead d'un listener touchmove sur chaque scroll normal.
         syncReelLockTouchHandler(shouldLock);
+        // Synchronise le "gap cover" qui masque le Reel suivant rendu
+        // en dessous de la video courante dans les DM Reels.
+        syncReelGapCover();
 
         // Etat vide de la loupe Instagram : pose uniquement quand on
         // est sur /explore/ sans recherche active. La classe est lue
@@ -1201,6 +1230,53 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       /**
+       * Injecte le div "gap cover" pour les DM Reels. Son positionnement
+       * est ajuste dynamiquement par syncReelGapCover a chaque tick, pour
+       * couvrir la zone entre le bas de la video courante et le bas du
+       * viewport (zone ou Instagram rend le Reel suivant).
+       */
+      function injectReelGapCover() {
+        if (document.getElementById('authentique-reel-gap-cover')) { return; }
+        var cover = document.createElement('div');
+        cover.id = 'authentique-reel-gap-cover';
+        cover.className = 'authentique-reel-gap-cover';
+        (document.body || document.documentElement).appendChild(cover);
+      }
+
+      /**
+       * Ajuste dynamiquement la position du gap cover :
+       *  - Si on est en DM Reel overlay : trouve la video courante,
+       *    place le cover de video.bottom jusqu'au bas du viewport.
+       *  - Sinon : cache le cover.
+       */
+      function syncReelGapCover() {
+        var cover = document.getElementById('authentique-reel-gap-cover');
+        if (!cover) { return; }
+        if (!isDMReelOverlayOpen()) {
+          cover.style.display = 'none';
+          return;
+        }
+        var videos = document.querySelectorAll('video');
+        var currentVideo = null;
+        for (var i = 0; i < videos.length; i++) {
+          if (videos[i].offsetHeight >= 200) {
+            currentVideo = videos[i];
+            break;
+          }
+        }
+        if (!currentVideo) {
+          cover.style.display = 'none';
+          return;
+        }
+        var rect = currentVideo.getBoundingClientRect();
+        // On place le cover juste sous la video courante, jusqu'au bas
+        // du viewport. La barre de reponse d'Instagram (position: fixed
+        // avec z-index eleve) s'affiche par-dessus naturellement.
+        cover.style.top = Math.max(0, rect.bottom) + 'px';
+        cover.style.display = 'block';
+      }
+
+      /**
        * Injecte le message "etat vide" de la loupe Instagram. Meme
        * principe que l'overlay Reels : un div injecte une seule fois
        * dans body, cache par defaut, rendu visible par la classe
@@ -1334,6 +1410,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function start() {
         injectReelsWaitingOverlay();
+        injectReelGapCover();
         injectExploreEmptyState();
         installExploreScrollBlock();
         // Premier full scan : updateRouteMarker + tous les scanners

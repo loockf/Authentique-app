@@ -45,12 +45,12 @@
  *               Nouvelle approche : identifier la video "courante"
  *               et cacher les conteneurs des videos additionnelles
  *               (les Reels suivants rendus en dessous par Instagram).
- *   Alpha 2.6 — ajout position:relative sur body reel-locked pour
- *               que les Reels en position:absolute (utilises par
- *               Instagram) soient enfin clippes par notre
- *               overflow-y:hidden. Safety supplementaire sur le
- *               scan video : ne cacher que les conteneurs physi-
- *               quement en dessous du Reel courant (protege la
- *               barre de reponse).
+ *   Alpha 2.6 — position:relative (echec, meme resultat que 2.4).
+ *   Alpha 2.7 — nouvelle approche : injection d'un overlay noir
+ *               "gap cover" positionne dynamiquement sous la video
+ *               courante, jusqu'au bas du viewport. Les approches
+ *               CSS (overflow, position:relative) ont echoue donc
+ *               on couvre la zone physiquement. La barre de reponse
+ *               (z-index eleve) reste visible par-dessus.
  */
-export const APP_VERSION = 'Alpha 2.6';
+export const APP_VERSION = 'Alpha 2.7';
