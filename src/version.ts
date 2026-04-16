@@ -35,7 +35,13 @@
  *   Alpha 1.6 — auto-skip (abandonne).
  *   Alpha 2.0 — onglet Reels bloque avec message philosophique.
  *   Alpha 2.1 — fix ecran noir sur Reel DM.
- *   Alpha 2.2 — cache le label "Suggestions" en bas des Reels DM
- *               en ciblant l'element lui-meme (pas de walk-up).
+ *   Alpha 2.2 — cache le label "Suggestions" en bas des Reels DM.
+ *   Alpha 2.3 — simplification CSS (abandonne, icones coupees).
+ *   Alpha 2.4 — clipping vertical uniquement sur le DM Reel :
+ *               overflow-y: hidden + max-height: 100vh sur body/main
+ *               pour cacher le contenu qui depasse en bas (Reel
+ *               suivant, suggestions), tout en gardant overflow-x
+ *               visible pour que les boutons d'action restent
+ *               visibles a droite.
  */
-export const APP_VERSION = 'Alpha 2.2';
+export const APP_VERSION = 'Alpha 2.4';

@@ -261,7 +261,17 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     body.authentique-reel-locked [role="main"] {
       overscroll-behavior: none !important;
       touch-action: pan-x !important;
-      overflow: visible !important;
+      /* overflow-x: visible pour que les boutons d'action (❤ 💬 ↗)
+         qui debordent horizontalement a droite restent visibles.
+         overflow-y: hidden + max-height: 100vh pour clipper tout
+         contenu qui dépasse verticalement — c'est ce qui causait
+         la "bande noire" en bas (debut du Reel suivant ou section
+         suggestions rendue dans le DOM). Instagram mobile web
+         empile les Reels dans une meme colonne, on constraint juste
+         la zone visible a la hauteur du viewport. */
+      overflow-x: visible !important;
+      overflow-y: hidden !important;
+      max-height: 100vh !important;
       max-width: 100vw !important;
       min-width: 0 !important;
     }
@@ -271,10 +281,8 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        d'action du reel (heart, comment, share, save) dans un conteneur
        qui peut avoir un max-width plus etroit que le viewport, OU un
        overflow: hidden sur un ancetre profond. L'un des deux cause la
-       "bande noire" qui cache les boutons. On force les deux a visible
-       pour deboucher tout ce qui pourrait etre clipe. Trade-off : on
-       perd les scroll containers internes au reel lock, mais dans ce
-       contexte il ne doit rien y avoir a scroller de toute facon. */
+       "bande noire" horizontale qui cache les boutons. On force les
+       deux a visible pour deboucher tout ce qui pourrait etre clipe. */
     body.authentique-reel-locked *:not(video):not(input):not(textarea) {
       overscroll-behavior: none !important;
       touch-action: pan-x !important;
