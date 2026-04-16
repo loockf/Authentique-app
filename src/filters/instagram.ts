@@ -200,24 +200,29 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     .authentique-reels-waiting {
       display: none;
       position: fixed;
-      left: 50%;
-      top: 45%;
-      transform: translate(-50%, -50%);
-      padding: 12px 20px;
-      background: rgba(0, 0, 0, 0.65);
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 50px;
+      /* Fond noir opaque pour recouvrir completement le Reel non-ami.
+         pointer-events: none pour que le user puisse swiper au Reel
+         suivant A TRAVERS l'overlay — Instagram gere le snap-scroll
+         en dessous. */
+      background: #000000;
       color: rgba(255, 255, 255, 0.92);
-      border-radius: 10px;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 14px;
       line-height: 1.4;
       text-align: center;
       pointer-events: none;
-      z-index: 0;
+      z-index: 999;
       letter-spacing: 0.2px;
-      max-width: 80%;
     }
     body.authentique-on-reels .authentique-reels-waiting {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
     }
 
     /* -----------------------------------------------------------------
@@ -649,13 +654,15 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       function updateRouteMarker() {
         if (!document.body) { return; }
 
-        // L'overlay "En attente d'un Reel de tes amis..." n'est pertinent
-        // que sur le fil /reels/ (plural) ET quand aucun Reel n'est
-        // effectivement visible a l'ecran. On le faisait auparavant en
-        // se basant uniquement sur la route, ce qui affichait l'overlay
-        // par-dessus des Reels d'amis valides. Version 2 : check
-        // dynamique sur la presence d'une <video> visible.
-        var showReelsOverlay = isReelsFeedRoute() && !hasVisibleReelInPage();
+        // L'overlay "En attente d'un Reel de tes amis..." se montre
+        // quand on est sur /reels/ ET que le Reel actuellement visible
+        // est d'un non-ami (bouton "Suivre" detecte dans le viewport).
+        // Si c'est un ami (pas de "Suivre"), l'overlay se retire et
+        // l'utilisateur voit le Reel normalement.
+        // L'overlay a pointer-events:none, donc le user peut swiper
+        // au Reel suivant meme quand l'overlay est affiche.
+        var showReelsOverlay = isReelsFeedRoute() &&
+          (!hasVisibleReelInPage() || isCurrentReelNonFriend());
         document.body.classList.toggle('authentique-on-reels', showReelsOverlay);
 
         // Le lock du swipe vertical s'applique dans deux cas :
@@ -847,46 +854,42 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       /**
-       * Contre-signal : est-ce que la card contient un indicateur
-       * "Suivi(e)" ou "Following" qui prouve que l'auteur du Reel
-       * est un ami ? Si oui, on ne masque PAS le Reel meme si un
-       * bouton "Suivre" est present (il viendrait d'un widget
-       * "Suggestions" imbrique, pas de l'auteur du Reel).
+       * Detection simplifiee : est-ce que le Reel ACTUELLEMENT
+       * visible a l'ecran est d'un non-ami ?
+       *
+       * Au lieu de chercher des conteneurs DOM (findReelCardFromVideo)
+       * qui causaient des faux positifs, on regarde simplement si un
+       * bouton "Suivre"/"Follow" est VISIBLE dans le viewport. Sur
+       * la page Reels, le Reel courant remplit l'ecran, et son bouton
+       * "Suivre" (s'il y en a un) est affiche en bas pres du pseudo.
+       *
+       * Si un tel bouton est trouve -> non-ami -> overlay opaque.
+       * Si pas trouve -> ami (ou rien de charge) -> pas d'overlay.
        */
-      var FOLLOWING_NEEDLES = ['Suivi(e)', 'Following', 'Abonné(e)', 'Abonnée', 'Abonné'];
-      function cardHasFollowingIndicator(card) {
-        if (!card) { return false; }
-        // On cherche dans TOUS les elements textuels, pas seulement
-        // les boutons, parce qu'Instagram peut afficher "Suivi(e)"
-        // comme un label, un span, ou un bouton selon le contexte.
-        var allElements = card.querySelectorAll('button, [role="button"], span, a');
-        for (var i = 0; i < allElements.length; i++) {
-          var el = allElements[i];
-          if (el.offsetWidth === 0 || el.offsetHeight === 0) { continue; }
-          var t = (el.textContent || '').trim();
-          for (var j = 0; j < FOLLOWING_NEEDLES.length; j++) {
-            if (t === FOLLOWING_NEEDLES[j]) { return true; }
+      function isCurrentReelNonFriend() {
+        var buttons = document.querySelectorAll('button, [role="button"]');
+        for (var i = 0; i < buttons.length; i++) {
+          var btn = buttons[i];
+          if (btn.offsetWidth === 0 || btn.offsetHeight === 0) { continue; }
+          // Le bouton doit etre dans le viewport visible
+          var rect = btn.getBoundingClientRect ? btn.getBoundingClientRect() : null;
+          if (!rect) { continue; }
+          if (rect.bottom < 0 || rect.top > window.innerHeight) { continue; }
+          if (rect.right < 0 || rect.left > window.innerWidth) { continue; }
+
+          var t = (btn.textContent || '').trim();
+          for (var j = 0; j < FOLLOW_NEEDLES.length; j++) {
+            if (t === FOLLOW_NEEDLES[j]) { return true; }
           }
         }
         return false;
       }
 
       function scanReelsFullscreen() {
-        if (!isReelsFeedRoute()) { return; }
-        var videos = document.querySelectorAll('video');
-        for (var i = 0; i < videos.length; i++) {
-          var card = findReelCardFromVideo(videos[i]);
-          if (!card) { continue; }
-          if (card.classList.contains('authentique-hidden')) { continue; }
-          // Un Reel est masque UNIQUEMENT si :
-          //  1. Il a un bouton "Suivre" (compte non suivi)
-          //  2. Il n'a PAS d'indicateur "Suivi(e)" (contre-signal ami)
-          // Si les deux sont presents (widget suggestions imbrique dans
-          // un Reel d'ami), le contre-signal l'emporte et on garde.
-          if (cardHasFollowButton(card) && !cardHasFollowingIndicator(card)) {
-            hide(card, 'reels-non-friend');
-          }
-        }
+        // Le filtrage des Reels non-amis est gere par l'overlay
+        // dynamique dans updateRouteMarker via isCurrentReelNonFriend.
+        // Plus de manipulation DOM (display:none) sur les cards.
+        return;
       }
 
       // --- Filtre Explore (loupe Instagram) ------------------------------
