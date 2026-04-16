@@ -24,5 +24,9 @@
  *               barre de recherche (top 52px) et bottom nav (bottom
  *               50px), z-index 999, flexbox centering. Recouvre la
  *               structure de la grille (bordures, icones).
+ *   Alpha 1.1 — reactivation du filtre Reels : masque les Reels de
+ *               comptes non suivis (bouton Suivre/Follow detecte).
+ *               Overlay "En attente d'un Reel de tes amis" apparait
+ *               quand aucun Reel d'ami n'est visible.
  */
-export const APP_VERSION = 'Alpha 1.0';
+export const APP_VERSION = 'Alpha 1.1';

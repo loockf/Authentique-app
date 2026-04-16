@@ -847,25 +847,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       function scanReelsFullscreen() {
-        // ---------------------------------------------------------------
-        // DESACTIVE TEMPORAIREMENT
-        // ---------------------------------------------------------------
-        // Le filtrage contextuel des Reels par detection du bouton Suivre
-        // etait instable : soit il masquait tout (y compris les Reels
-        // d'amis, a cause de faux positifs dans des suggestions widgets
-        // imbriques), soit il laissait tout passer (quand la position
-        // du Follow button ne matchait pas l'heuristique). Sans intel
-        // DOM plus fine et stable, on prefere ne rien masquer du tout
-        // plutot que de casser l'onglet Reels.
-        //
-        // A reprendre quand on aura soit un nouveau heuristique DOM
-        // fiable, soit une toggle explicite dans Parametres pour que
-        // l'utilisateur decide s'il veut activer ce filtre experimental.
-        //
-        // Les autres filtres Reels (scanReels pour les sections Reels
-        // dans le home feed, scanSponsored pour les publicites) restent
-        // actifs et non affectes par cette desactivation.
-        return;
+        if (!isReelsFeedRoute()) { return; }
+        var videos = document.querySelectorAll('video');
+        for (var i = 0; i < videos.length; i++) {
+          var card = findReelCardFromVideo(videos[i]);
+          if (!card) { continue; }
+          if (card.classList.contains('authentique-hidden')) { continue; }
+          if (cardHasFollowButton(card)) {
+            hide(card, 'reels-non-friend');
+          }
+        }
       }
 
       // --- Filtre Explore (loupe Instagram) ------------------------------
