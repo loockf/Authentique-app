@@ -654,15 +654,17 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       function updateRouteMarker() {
         if (!document.body) { return; }
 
-        // L'overlay "En attente d'un Reel de tes amis..." se montre
-        // quand on est sur /reels/ ET que le Reel actuellement visible
-        // est d'un non-ami (bouton "Suivre" detecte dans le viewport).
-        // Si c'est un ami (pas de "Suivre"), l'overlay se retire et
-        // l'utilisateur voit le Reel normalement.
-        // L'overlay a pointer-events:none, donc le user peut swiper
-        // au Reel suivant meme quand l'overlay est affiche.
-        var showReelsOverlay = isReelsFeedRoute() &&
-          (!hasVisibleReelInPage() || isCurrentReelNonFriend());
+        // L'overlay "En attente d'un Reel de tes amis..." est ON par
+        // defaut sur /reels/. Il ne se retire QUE quand on a une
+        // preuve positive que le Reel courant est d'un ami :
+        //   - une video visible dans la page (contenu charge)
+        //   - ET aucun bouton "Suivre" dans le viewport
+        // Pendant les transitions entre Reels (pas encore de video,
+        // ou video en cours de chargement), l'overlay reste noir
+        // pour eviter tout flash de contenu non-ami.
+        var isConfirmedFriend = isReelsFeedRoute() &&
+          hasVisibleReelInPage() && !isCurrentReelNonFriend();
+        var showReelsOverlay = isReelsFeedRoute() && !isConfirmedFriend;
         document.body.classList.toggle('authentique-on-reels', showReelsOverlay);
 
         // Le lock du swipe vertical s'applique dans deux cas :
