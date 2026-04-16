@@ -1192,90 +1192,9 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // pas une story, pas un reel fullscreen), on clique programmatiquement
       // le lien de l'onglet cible dans la bottom nav d'Instagram.
       //
-      // Precautions :
-      //  - allowsBackForwardNavigationGestures est desactive cote RN WebView
-      //    pour ne plus avoir de conflit avec l'edge-swipe natif.
-      //  - On ne declenche que sur les routes root (/, /explore/, /reels/,
-      //    /direct/inbox/) et jamais sur les routes nested (/p/, /reel/,
-      //    /stories/, /direct/t/).
-      //  - On ignore les swipes qui partent d'un element interactif type
-      //    [role="presentation"] (carousel), [role="button"] (clickable).
-      //  - On exige un mouvement horizontal dominant (|dx| > 2 × |dy|) et
-      //    une duree courte (< 500ms) pour ne pas confondre avec un scroll.
-      var TAB_ROUTE_ORDER = ['/', '/explore/', '/reels/', '/direct/inbox/'];
-      function isSwipableRootRoute() {
-        var p = location.pathname || '';
-        if (p === '' || p === '/') { return true; }
-        if (p === '/explore/' || p === '/explore') { return true; }
-        if (p === '/reels/' || p === '/reels') { return true; }
-        if (p === '/direct/inbox/' || p === '/direct/inbox') { return true; }
-        return false;
-      }
-      function getCurrentTabRouteIndex() {
-        var p = location.pathname || '';
-        if (p === '' || p === '/') { return 0; }
-        if (p.indexOf('/explore') === 0) { return 1; }
-        if (p.indexOf('/reels') === 0) { return 2; }
-        if (p.indexOf('/direct') === 0) { return 3; }
-        return -1;
-      }
-      function findTabLink(route) {
-        // Cherche un <a href> qui correspond a la route cible, en
-        // prefereant ceux dans la bottom nav (role=tablist ou role=link).
-        // Les selecteurs exacts varient mais href commence par notre route.
-        var candidates = document.querySelectorAll('a[href^="' + route + '"]');
-        // Retour du premier visible
-        for (var i = 0; i < candidates.length; i++) {
-          var a = candidates[i];
-          if (a.offsetWidth > 0 && a.offsetHeight > 0) { return a; }
-        }
-        return null;
-      }
-      function navigateToTabByIndex(index) {
-        if (index < 0 || index >= TAB_ROUTE_ORDER.length) { return; }
-        var route = TAB_ROUTE_ORDER[index];
-        var link = findTabLink(route);
-        if (link && typeof link.click === 'function') {
-          link.click();
-        } else {
-          // Fallback : navigation directe
-          try { location.href = route; } catch (e) {}
-        }
-      }
-      var tabSwipeStartX = 0;
-      var tabSwipeStartY = 0;
-      var tabSwipeStartTime = 0;
-      function installTabSwipeNav() {
-        document.addEventListener('touchstart', function(e) {
-          if (e.touches && e.touches.length === 1) {
-            tabSwipeStartX = e.touches[0].clientX;
-            tabSwipeStartY = e.touches[0].clientY;
-            tabSwipeStartTime = Date.now();
-          }
-        }, { passive: true });
-
-        document.addEventListener('touchend', function(e) {
-          if (!e.changedTouches || e.changedTouches.length !== 1) { return; }
-          if (!isSwipableRootRoute()) { return; }
-          var dx = e.changedTouches[0].clientX - tabSwipeStartX;
-          var dy = e.changedTouches[0].clientY - tabSwipeStartY;
-          var elapsed = Date.now() - tabSwipeStartTime;
-          if (Math.abs(dx) < 80) { return; }
-          if (Math.abs(dx) < Math.abs(dy) * 2) { return; }
-          if (elapsed > 500) { return; }
-
-          var currentIndex = getCurrentTabRouteIndex();
-          if (currentIndex < 0) { return; }
-          // Swipe gauche (dx < 0) -> onglet suivant, swipe droite -> precedent
-          var nextIndex = dx < 0 ? currentIndex + 1 : currentIndex - 1;
-          navigateToTabByIndex(nextIndex);
-        }, { passive: true });
-      }
-
       function start() {
         injectReelsWaitingOverlay();
         injectExploreEmptyState();
-        installTabSwipeNav();
         // Premier full scan : updateRouteMarker + tous les scanners
         // (sponsored, suggestions, reels, explore, DM, etc.).
         fullScan();
