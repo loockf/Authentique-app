@@ -49,7 +49,7 @@ import { loadNavPosition, saveNavPosition, type NavPosition } from '../storage/u
  */
 
 const BUTTON_SIZE = 48;
-const LONG_PRESS_DELAY_MS = 400;
+const LONG_PRESS_DELAY_MS = 200;
 const DRAG_CANCEL_THRESHOLD = 8;
 const EDGE_MARGIN = 12;
 const TOP_SAFE_MARGIN = 60;

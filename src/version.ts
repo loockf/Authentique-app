@@ -12,5 +12,7 @@
  *               fix back-nav, reset position, suppression focus
  *               mode / hide likes, auto-snap, blocage pull-to-refresh
  *               explore, suppression tab swipe, ajout version.
+ *   Alpha 0.6 — retour a Alpha 0.1 + long-press bouton flottant
+ *               raccourci de 400ms a 200ms.
  */
-export const APP_VERSION = 'Alpha 0.1';
+export const APP_VERSION = 'Alpha 0.6';
