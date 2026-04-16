@@ -28,5 +28,9 @@
  *               comptes non suivis (bouton Suivre/Follow detecte).
  *               Overlay "En attente d'un Reel de tes amis" apparait
  *               quand aucun Reel d'ami n'est visible.
+ *   Alpha 1.2 — fix faux positifs Reels : ajout contre-signal
+ *               "Suivi(e)"/"Following" qui empeche de masquer un
+ *               Reel d'ami meme si un widget Suggestions imbrique
+ *               contient un bouton "Suivre".
  */
-export const APP_VERSION = 'Alpha 1.1';
+export const APP_VERSION = 'Alpha 1.2';

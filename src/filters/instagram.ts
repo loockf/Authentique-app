@@ -846,6 +846,31 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         return false;
       }
 
+      /**
+       * Contre-signal : est-ce que la card contient un indicateur
+       * "Suivi(e)" ou "Following" qui prouve que l'auteur du Reel
+       * est un ami ? Si oui, on ne masque PAS le Reel meme si un
+       * bouton "Suivre" est present (il viendrait d'un widget
+       * "Suggestions" imbrique, pas de l'auteur du Reel).
+       */
+      var FOLLOWING_NEEDLES = ['Suivi(e)', 'Following', 'Abonné(e)', 'Abonnée', 'Abonné'];
+      function cardHasFollowingIndicator(card) {
+        if (!card) { return false; }
+        // On cherche dans TOUS les elements textuels, pas seulement
+        // les boutons, parce qu'Instagram peut afficher "Suivi(e)"
+        // comme un label, un span, ou un bouton selon le contexte.
+        var allElements = card.querySelectorAll('button, [role="button"], span, a');
+        for (var i = 0; i < allElements.length; i++) {
+          var el = allElements[i];
+          if (el.offsetWidth === 0 || el.offsetHeight === 0) { continue; }
+          var t = (el.textContent || '').trim();
+          for (var j = 0; j < FOLLOWING_NEEDLES.length; j++) {
+            if (t === FOLLOWING_NEEDLES[j]) { return true; }
+          }
+        }
+        return false;
+      }
+
       function scanReelsFullscreen() {
         if (!isReelsFeedRoute()) { return; }
         var videos = document.querySelectorAll('video');
@@ -853,7 +878,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           var card = findReelCardFromVideo(videos[i]);
           if (!card) { continue; }
           if (card.classList.contains('authentique-hidden')) { continue; }
-          if (cardHasFollowButton(card)) {
+          // Un Reel est masque UNIQUEMENT si :
+          //  1. Il a un bouton "Suivre" (compte non suivi)
+          //  2. Il n'a PAS d'indicateur "Suivi(e)" (contre-signal ami)
+          // Si les deux sont presents (widget suggestions imbrique dans
+          // un Reel d'ami), le contre-signal l'emporte et on garde.
+          if (cardHasFollowButton(card) && !cardHasFollowingIndicator(card)) {
             hide(card, 'reels-non-friend');
           }
         }
