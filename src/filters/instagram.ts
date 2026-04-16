@@ -1109,24 +1109,33 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           }
         }
 
-        // Etape 2 : les vrais headings (h2-h4, role=heading) avec
-        // walk-up limite a 2 niveaux. PAS de span ici.
-        var headings = document.querySelectorAll('h2, h3, h4, [role="heading"]');
-        for (var i = 0; i < headings.length; i++) {
-          var h = headings[i];
-          if (h.classList.contains('authentique-hidden')) { continue; }
-          if (h.children && h.children.length > 1) { continue; }
-          var t = (h.textContent || '').trim();
-          if (!t || t.length > 40) { continue; }
-          var matched = false;
-          for (var j = 0; j < REEL_OVERLAY_SUGGEST_NEEDLES.length; j++) {
-            if (t === REEL_OVERLAY_SUGGEST_NEEDLES[j]) { matched = true; break; }
+        // Etape 2 : cacher les Reels "suivants" rendus en dessous du
+        // Reel courant. Instagram mobile web les empile dans le DOM
+        // pour le snap-scroll. On identifie la video "courante"
+        // (premiere avec hauteur substantielle) et on cache les
+        // conteneurs des videos additionnelles.
+        //
+        // Cette approche remplace l'ancienne etape 2 qui faisait un
+        // walk-up depuis le heading "Suggestions" — risquee parce
+        // que le conteneur trouve pouvait aussi contenir la barre
+        // de reponse, la faisant disparaitre.
+        var videos = document.querySelectorAll('video');
+        var currentVideoIndex = -1;
+        for (var v = 0; v < videos.length; v++) {
+          if (videos[v].offsetHeight >= 200 &&
+              !videos[v].closest('.authentique-hidden')) {
+            currentVideoIndex = v;
+            break;
           }
-          if (!matched) { continue; }
-          // Walk up LIMITE a 2 niveaux max. L'ancienne version montait
-          // a 6 niveaux et finissait par capter le conteneur entier du
-          // Reel, causant l'ecran noir.
-          var container = h.parentElement;
+        }
+        if (currentVideoIndex === -1) { return; }
+
+        for (var w = 0; w < videos.length; w++) {
+          if (w === currentVideoIndex) { continue; }
+          var vid = videos[w];
+          if (vid.closest('.authentique-hidden')) { continue; }
+          // Remonter 2 niveaux max pour trouver le conteneur direct
+          var container = vid.parentElement;
           var depth = 0;
           while (container && container !== document.body && depth < 2) {
             if (container.offsetHeight >= 100) { break; }
@@ -1134,13 +1143,11 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
             depth++;
           }
           if (container && container !== document.body) {
-            // Safety : refuser de cacher un conteneur qui fait plus de
-            // 70% du viewport — c'est probablement le Reel lui-meme.
+            // Safety : jamais cacher plus de 70% du viewport.
             if (container.offsetHeight > window.innerHeight * 0.7) { continue; }
-            var mainEl = document.querySelector('main') || document.querySelector('[role="main"]');
-            if (container !== mainEl && !(mainEl && container.contains(mainEl))) {
-              hide(container, 'reel-overlay-suggestion');
-            }
+            // Safety : ne jamais englober le Reel courant.
+            if (container.contains(videos[currentVideoIndex])) { continue; }
+            hide(container, 'next-reel-below');
           }
         }
       }
