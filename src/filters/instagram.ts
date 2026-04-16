@@ -1082,11 +1082,27 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       ];
       function scanReelOverlaySuggestions() {
         if (!isDMReelOverlayOpen()) { return; }
-        // RESTRICTIF : on ne scanne que les vrais headings, PAS les
-        // span. L'ancienne version incluait span, ce qui matchait
-        // n'importe quel span avec texte "Suggestions" dans l'UI du
-        // Reel (p.ex. un label interne Instagram) — walk-up trop
-        // agressif → hide du reel modal entier → ecran noir.
+
+        // Etape 1 : cacher le label "Suggestions" lui-meme (souvent
+        // un span ou div sans enfants). On le cache LUI, pas son
+        // parent, pour eviter l'ecran noir qu'un walk-up causerait.
+        var labels = document.querySelectorAll('span, div');
+        for (var k = 0; k < labels.length; k++) {
+          var lbl = labels[k];
+          if (lbl.classList.contains('authentique-hidden')) { continue; }
+          if (lbl.children && lbl.children.length > 0) { continue; }
+          if (lbl.offsetHeight > 50) { continue; }
+          var lt = (lbl.textContent || '').trim();
+          for (var m = 0; m < REEL_OVERLAY_SUGGEST_NEEDLES.length; m++) {
+            if (lt === REEL_OVERLAY_SUGGEST_NEEDLES[m]) {
+              hide(lbl, 'reel-suggestion-label');
+              break;
+            }
+          }
+        }
+
+        // Etape 2 : les vrais headings (h2-h4, role=heading) avec
+        // walk-up limite a 2 niveaux. PAS de span ici.
         var headings = document.querySelectorAll('h2, h3, h4, [role="heading"]');
         for (var i = 0; i < headings.length; i++) {
           var h = headings[i];
