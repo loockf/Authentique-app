@@ -397,6 +397,9 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // 3 ticks avant de retirer l'overlay pour eviter les faux
       // positifs lies au chargement asynchrone du bouton "Suivre".
       var reelFriendConfirmCount = 0;
+      // Auto-skip : compteur de skips consecutifs et flag anti-double.
+      var reelAutoSkipCount = 0;
+      var reelAutoSkipScheduled = false;
 
       // --- Helpers ---------------------------------------------------------
 
@@ -683,6 +686,40 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         var isConfirmedFriend = reelFriendConfirmCount >= 3;
         var showReelsOverlay = isReelsFeedRoute() && !isConfirmedFriend;
         document.body.classList.toggle('authentique-on-reels', showReelsOverlay);
+
+        // --- Auto-skip des Reels non-amis --------------------------------
+        //
+        // Quand un non-ami est detecte (overlay ON + video visible +
+        // bouton "Suivre" dans le viewport), on scroll automatiquement
+        // au Reel suivant apres un court delai. L'overlay reste noir
+        // pendant toute l'operation — le user ne voit jamais le
+        // contenu non-ami. Le scroll se fait en douceur (smooth) pour
+        // que Instagram detecte la navigation et charge le Reel suivant.
+        //
+        // Fail-safe : max 20 skips consecutifs. Apres ca, on arrete
+        // et le message "En attente..." reste affiche. Le compteur
+        // se reset quand un ami est trouve ou quand on quitte /reels/.
+        var isNonFriendVisible = isReelsFeedRoute() &&
+          hasVisibleReelInPage() && isCurrentReelNonFriend();
+        if (isNonFriendVisible && reelAutoSkipCount < 20 && !reelAutoSkipScheduled) {
+          reelAutoSkipScheduled = true;
+          setTimeout(function() {
+            reelAutoSkipScheduled = false;
+            reelAutoSkipCount++;
+            try {
+              window.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
+            } catch (e) {
+              try { window.scrollBy(0, window.innerHeight); } catch (e2) {}
+            }
+          }, 800);
+        }
+        if (isConfirmedFriend) {
+          reelAutoSkipCount = 0;
+        }
+        if (!isReelsFeedRoute()) {
+          reelAutoSkipCount = 0;
+          reelFriendConfirmCount = 0;
+        }
 
         // Le lock du swipe vertical s'applique dans deux cas :
         //  1. /reel/<id>/ — Reel ouvert via URL singleton (lien partage)
