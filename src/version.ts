@@ -20,5 +20,9 @@
  *               rAF loop pour detection route a chaque frame (~16ms),
  *               visibility:hidden sur img/video/canvas/article dans
  *               main pour eliminer le flash au switch rapide.
+ *   Alpha 1.0 — overlay explore opaque plein cadre (#fafafa) entre
+ *               barre de recherche (top 52px) et bottom nav (bottom
+ *               50px), z-index 999, flexbox centering. Recouvre la
+ *               structure de la grille (bordures, icones).
  */
-export const APP_VERSION = 'Alpha 0.9';
+export const APP_VERSION = 'Alpha 1.0';

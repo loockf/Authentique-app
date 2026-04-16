@@ -323,15 +323,22 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     .authentique-explore-empty {
       display: none;
       position: fixed;
-      left: 50%;
-      top: 45%;
-      transform: translate(-50%, -50%);
-      max-width: 320px;
+      left: 0;
+      right: 0;
+      /* Positionne entre la barre de recherche en haut et la bottom
+         nav en bas. Les valeurs sont generiques : 52px laisse la
+         barre de recherche visible, 50px laisse la bottom nav. */
+      top: 52px;
+      bottom: 50px;
+      /* Fond opaque identique au fond Instagram clair. Recouvre
+         entierement la grille (structure, icones, bordures) pour
+         qu'aucun element ne soit visible derriere le message. */
+      background-color: #fafafa;
       padding: 0 24px;
       text-align: center;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       pointer-events: none;
-      z-index: 0;
+      z-index: 999;
     }
     .authentique-explore-empty .authentique-explore-empty-title {
       display: block;
@@ -349,7 +356,10 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       line-height: 1.5;
     }
     body.authentique-on-explore-idle .authentique-explore-empty {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
     }
   `;
 
