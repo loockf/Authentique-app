@@ -302,8 +302,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        ----------------------------------------------------------------- */
     /* Blocage du scroll sur /explore/ en idle : empeche le
        pull-to-refresh et le flash de contenu suggere. Le scroll
-       se reactive quand l'utilisateur tape une recherche. */
+       se reactive quand l'utilisateur tape une recherche.
+       position:fixed est le hack standard iOS pour bloquer le
+       scroll — overflow:hidden seul ne suffit pas quand Instagram
+       fait defiler un conteneur interne plutot que le body. */
     body.authentique-on-explore-idle {
+      position: fixed !important;
+      width: 100% !important;
       overflow: hidden !important;
     }
 
@@ -1241,6 +1246,32 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         window.addEventListener('popstate', function() {
           fullScan();
         });
+
+        // --- Detection instantanee des navigations SPA ---------------
+        //
+        // Instagram utilise history.pushState / replaceState pour ses
+        // navigations internes (changement d'onglet, ouverture d'un
+        // post, etc.). popstate ne fire PAS sur pushState — il ne fire
+        // que sur back/forward du navigateur. Resultat : quand
+        // l'utilisateur tape sur l'onglet Explore, notre poll met
+        // jusqu'a 500ms a detecter la nouvelle route, et pendant ce
+        // delai le contenu explore est visible en flash.
+        //
+        // Fix : on monkey-patch pushState et replaceState pour lancer
+        // un fullScan synchrone juste apres chaque navigation. Le
+        // body class authentique-on-explore-idle est pose dans les
+        // microsecondes qui suivent la navigation, avant meme que le
+        // paint suivant ne se produise. Zero flash.
+        var origPushState = history.pushState;
+        var origReplaceState = history.replaceState;
+        history.pushState = function() {
+          origPushState.apply(this, arguments);
+          try { fullScan(); } catch (e) {}
+        };
+        history.replaceState = function() {
+          origReplaceState.apply(this, arguments);
+          try { fullScan(); } catch (e) {}
+        };
 
         post({ type: 'ready', platform: 'instagram' });
       }
