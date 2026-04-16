@@ -204,16 +204,16 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       right: 0;
       top: 0;
       bottom: 50px;
-      /* Fond noir opaque pour recouvrir completement le Reel non-ami.
-         pointer-events: none pour que le user puisse swiper au Reel
-         suivant A TRAVERS l'overlay — Instagram gere le snap-scroll
-         en dessous. */
       background: #000000;
       color: rgba(255, 255, 255, 0.92);
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 14px;
       line-height: 1.4;
       text-align: center;
+      padding: 0 32px;
+      /* pointer-events: none pour que la bottom nav reste accessible
+         en dessous (meme si elle est hors du bottom:50px, certains
+         gestes iOS propagent vers la zone adjacente). */
       pointer-events: none;
       z-index: 999;
       letter-spacing: 0.2px;
@@ -396,10 +396,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // a celui d'un ami (video visible + pas de "Suivre"). On exige
       // 3 ticks avant de retirer l'overlay pour eviter les faux
       // positifs lies au chargement asynchrone du bouton "Suivre".
-      var reelFriendConfirmCount = 0;
-      // Auto-skip : compteur de skips consecutifs et flag anti-double.
-      var reelAutoSkipCount = 0;
-      var reelAutoSkipScheduled = false;
 
       // --- Helpers ---------------------------------------------------------
 
@@ -662,64 +658,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       function updateRouteMarker() {
         if (!document.body) { return; }
 
-        // L'overlay "En attente d'un Reel de tes amis..." est ON par
-        // defaut sur /reels/. Il ne se retire QUE quand on a une
-        // preuve SOUTENUE que le Reel courant est d'un ami :
-        //   - une video visible dans la page (contenu charge)
-        //   - ET aucun bouton "Suivre" dans le viewport
-        //   - ET cette condition est stable depuis plusieurs ticks
-        //
-        // Le delai de confirmation empeche le flash blanc qui se
-        // produisait quand la video chargeait AVANT le bouton
-        // "Suivre" : pendant ce bref instant, le check croyait
-        // que c'etait un ami et retirait l'overlay. Avec le
-        // threshold, il faut 3 ticks consecutifs (~1.5s) pour
-        // confirmer, ce qui laisse le temps au bouton "Suivre"
-        // d'apparaitre s'il y en a un.
-        var looksLikeFriend = isReelsFeedRoute() &&
-          hasVisibleReelInPage() && !isCurrentReelNonFriend();
-        if (looksLikeFriend) {
-          reelFriendConfirmCount++;
-        } else {
-          reelFriendConfirmCount = 0;
-        }
-        var isConfirmedFriend = reelFriendConfirmCount >= 3;
-        var showReelsOverlay = isReelsFeedRoute() && !isConfirmedFriend;
+        // L'onglet Reels est le territoire de Meta. Authentique n'a pas
+        // a le conquerir. On pose simplement l'overlay informatif quand
+        // on est sur /reels/ — pas de detection d'amis, pas d'auto-skip,
+        // pas de manipulation DOM. Juste un message clair.
+        var showReelsOverlay = isReelsFeedRoute();
         document.body.classList.toggle('authentique-on-reels', showReelsOverlay);
-
-        // --- Auto-skip des Reels non-amis --------------------------------
-        //
-        // Quand un non-ami est detecte (overlay ON + video visible +
-        // bouton "Suivre" dans le viewport), on scroll automatiquement
-        // au Reel suivant apres un court delai. L'overlay reste noir
-        // pendant toute l'operation — le user ne voit jamais le
-        // contenu non-ami. Le scroll se fait en douceur (smooth) pour
-        // que Instagram detecte la navigation et charge le Reel suivant.
-        //
-        // Fail-safe : max 20 skips consecutifs. Apres ca, on arrete
-        // et le message "En attente..." reste affiche. Le compteur
-        // se reset quand un ami est trouve ou quand on quitte /reels/.
-        var isNonFriendVisible = isReelsFeedRoute() &&
-          hasVisibleReelInPage() && isCurrentReelNonFriend();
-        if (isNonFriendVisible && reelAutoSkipCount < 20 && !reelAutoSkipScheduled) {
-          reelAutoSkipScheduled = true;
-          setTimeout(function() {
-            reelAutoSkipScheduled = false;
-            reelAutoSkipCount++;
-            try {
-              window.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
-            } catch (e) {
-              try { window.scrollBy(0, window.innerHeight); } catch (e2) {}
-            }
-          }, 800);
-        }
-        if (isConfirmedFriend) {
-          reelAutoSkipCount = 0;
-        }
-        if (!isReelsFeedRoute()) {
-          reelAutoSkipCount = 0;
-          reelFriendConfirmCount = 0;
-        }
 
         // Le lock du swipe vertical s'applique dans deux cas :
         //  1. /reel/<id>/ — Reel ouvert via URL singleton (lien partage)
@@ -1179,7 +1123,22 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         var overlay = document.createElement('div');
         overlay.id = 'authentique-reels-waiting';
         overlay.className = 'authentique-reels-waiting';
-        overlay.textContent = "En attente d'un Reel de tes amis...";
+
+        var title = document.createElement('span');
+        title.style.cssText = 'display:block; font-size:16px; font-weight:600; margin-bottom:12px;';
+        title.textContent = "L'onglet Reels, c'est le territoire de Meta.";
+
+        var body1 = document.createElement('span');
+        body1.style.cssText = 'display:block; font-size:13px; color:rgba(255,255,255,0.7); line-height:1.5; margin-bottom:8px;';
+        body1.textContent = "Cet onglet ne propose quasiment que du contenu algorithmique. Authentique n'a pas à le conquérir.";
+
+        var body2 = document.createElement('span');
+        body2.style.cssText = 'display:block; font-size:13px; color:rgba(255,255,255,0.7); line-height:1.5;';
+        body2.textContent = "Les Reels de tes amis apparaissent dans ton fil d'actualité.";
+
+        overlay.appendChild(title);
+        overlay.appendChild(body1);
+        overlay.appendChild(body2);
         (document.body || document.documentElement).appendChild(overlay);
       }
 

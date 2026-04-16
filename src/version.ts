@@ -32,9 +32,11 @@
  *   Alpha 1.3 — approche overlay dynamique pour Reels.
  *   Alpha 1.4 — fix flash blanc entre Reels (logique inversee).
  *   Alpha 1.5 — delai de confirmation ami (3 ticks ~1.5s).
- *   Alpha 1.6 — auto-skip des Reels non-amis : scroll automatique
- *               au Reel suivant quand un non-ami est detecte.
- *               Overlay noir pendant la recherche. Max 20 skips
- *               consecutifs puis arret. Reset quand ami trouve.
+ *   Alpha 1.6 — auto-skip (abandonne).
+ *   Alpha 2.0 — onglet Reels bloque avec message philosophique.
+ *               Suppression de toute la logique de detection
+ *               d'amis, auto-skip, compteurs. L'onglet Reels est
+ *               le territoire de Meta, Authentique ne le conquiert
+ *               pas. Les Reels d'amis sont dans le fil d'actualite.
  */
-export const APP_VERSION = 'Alpha 1.6';
+export const APP_VERSION = 'Alpha 2.0';
