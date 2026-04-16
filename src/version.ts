@@ -30,8 +30,9 @@
  *               quand aucun Reel d'ami n'est visible.
  *   Alpha 1.2 — fix faux positifs Reels (contre-signal, echec).
  *   Alpha 1.3 — approche overlay dynamique pour Reels.
- *   Alpha 1.4 — fix flash blanc entre Reels : overlay ON par defaut,
- *               ne se retire que sur preuve positive d'ami (video
- *               visible + zero bouton Suivre).
+ *   Alpha 1.4 — fix flash blanc entre Reels (logique inversee).
+ *   Alpha 1.5 — delai de confirmation ami (3 ticks ~1.5s) avant de
+ *               retirer l'overlay Reels, elimine le flash cause par
+ *               le chargement asynchrone du bouton "Suivre".
  */
-export const APP_VERSION = 'Alpha 1.4';
+export const APP_VERSION = 'Alpha 1.5';

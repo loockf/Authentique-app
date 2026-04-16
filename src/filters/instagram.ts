@@ -392,6 +392,11 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // importe la valeur initiale. Ensuite on ne ré-emet que sur
       // changement d'etat.
       var lastReportedOnExplore = null;
+      // Compteur de ticks consecutifs ou le Reel courant ressemble
+      // a celui d'un ami (video visible + pas de "Suivre"). On exige
+      // 3 ticks avant de retirer l'overlay pour eviter les faux
+      // positifs lies au chargement asynchrone du bouton "Suivre".
+      var reelFriendConfirmCount = 0;
 
       // --- Helpers ---------------------------------------------------------
 
@@ -656,14 +661,26 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
         // L'overlay "En attente d'un Reel de tes amis..." est ON par
         // defaut sur /reels/. Il ne se retire QUE quand on a une
-        // preuve positive que le Reel courant est d'un ami :
+        // preuve SOUTENUE que le Reel courant est d'un ami :
         //   - une video visible dans la page (contenu charge)
         //   - ET aucun bouton "Suivre" dans le viewport
-        // Pendant les transitions entre Reels (pas encore de video,
-        // ou video en cours de chargement), l'overlay reste noir
-        // pour eviter tout flash de contenu non-ami.
-        var isConfirmedFriend = isReelsFeedRoute() &&
+        //   - ET cette condition est stable depuis plusieurs ticks
+        //
+        // Le delai de confirmation empeche le flash blanc qui se
+        // produisait quand la video chargeait AVANT le bouton
+        // "Suivre" : pendant ce bref instant, le check croyait
+        // que c'etait un ami et retirait l'overlay. Avec le
+        // threshold, il faut 3 ticks consecutifs (~1.5s) pour
+        // confirmer, ce qui laisse le temps au bouton "Suivre"
+        // d'apparaitre s'il y en a un.
+        var looksLikeFriend = isReelsFeedRoute() &&
           hasVisibleReelInPage() && !isCurrentReelNonFriend();
+        if (looksLikeFriend) {
+          reelFriendConfirmCount++;
+        } else {
+          reelFriendConfirmCount = 0;
+        }
+        var isConfirmedFriend = reelFriendConfirmCount >= 3;
         var showReelsOverlay = isReelsFeedRoute() && !isConfirmedFriend;
         document.body.classList.toggle('authentique-on-reels', showReelsOverlay);
 
