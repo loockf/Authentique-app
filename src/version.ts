@@ -14,5 +14,6 @@
  *               explore, suppression tab swipe, ajout version.
  *   Alpha 0.6 — retour a Alpha 0.1 + long-press bouton flottant
  *               raccourci de 400ms a 200ms.
+ *   Alpha 0.7 — blocage scroll sur /explore/ idle (overflow:hidden).
  */
-export const APP_VERSION = 'Alpha 0.6';
+export const APP_VERSION = 'Alpha 0.7';

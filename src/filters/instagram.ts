@@ -300,6 +300,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        isExploreRoute() && !isExploreSearchActive(). Elle agit a la
        fois pour masquer le spinner natif et pour reveler le message.
        ----------------------------------------------------------------- */
+    /* Blocage du scroll sur /explore/ en idle : empeche le
+       pull-to-refresh et le flash de contenu suggere. Le scroll
+       se reactive quand l'utilisateur tape une recherche. */
+    body.authentique-on-explore-idle {
+      overflow: hidden !important;
+    }
+
     body.authentique-on-explore-idle [role="progressbar"],
     body.authentique-on-explore-idle [aria-label*="Chargement" i],
     body.authentique-on-explore-idle [aria-label*="Loading" i],
