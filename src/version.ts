@@ -15,9 +15,10 @@
  *   Alpha 0.6 — retour a Alpha 0.1 + long-press bouton flottant
  *               raccourci de 400ms a 200ms.
  *   Alpha 0.7 — blocage scroll sur /explore/ idle (overflow:hidden).
- *   Alpha 0.8 — position:fixed sur body pour bloquer le scroll iOS,
- *               interception history.pushState/replaceState pour
- *               detection instantanee des changements de route
- *               (zero flash au switch rapide entre onglets).
+ *   Alpha 0.8 — position:fixed sur body (echec).
+ *   Alpha 0.9 — touchmove preventDefault pour bloquer le scroll,
+ *               rAF loop pour detection route a chaque frame (~16ms),
+ *               visibility:hidden sur img/video/canvas/article dans
+ *               main pour eliminer le flash au switch rapide.
  */
-export const APP_VERSION = 'Alpha 0.8';
+export const APP_VERSION = 'Alpha 0.9';

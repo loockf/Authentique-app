@@ -300,16 +300,15 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        isExploreRoute() && !isExploreSearchActive(). Elle agit a la
        fois pour masquer le spinner natif et pour reveler le message.
        ----------------------------------------------------------------- */
-    /* Blocage du scroll sur /explore/ en idle : empeche le
-       pull-to-refresh et le flash de contenu suggere. Le scroll
-       se reactive quand l'utilisateur tape une recherche.
-       position:fixed est le hack standard iOS pour bloquer le
-       scroll — overflow:hidden seul ne suffit pas quand Instagram
-       fait defiler un conteneur interne plutot que le body. */
-    body.authentique-on-explore-idle {
-      position: fixed !important;
-      width: 100% !important;
-      overflow: hidden !important;
+    /* Masquage du contenu explore en idle : rend les images et
+       videos invisibles pour eliminer le flash de contenu suggere
+       lors du switch rapide entre onglets. Le blocage du scroll
+       est gere cote JS via touchmove preventDefault. */
+    body.authentique-on-explore-idle main img,
+    body.authentique-on-explore-idle main video,
+    body.authentique-on-explore-idle main canvas,
+    body.authentique-on-explore-idle main article {
+      visibility: hidden !important;
     }
 
     body.authentique-on-explore-idle [role="progressbar"],
@@ -666,6 +665,8 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // par le CSS pour masquer les spinners et reveler le message.
         var showExploreEmpty = isExploreRoute() && !isExploreSearchActive();
         document.body.classList.toggle('authentique-on-explore-idle', showExploreEmpty);
+        // Synchronise le flag de blocage tactile du scroll sur /explore/.
+        exploreScrollBlocked = showExploreEmpty;
 
         // --- Signalement du flag "on explore" vers React Native ------
         //
@@ -1204,9 +1205,30 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // pas une story, pas un reel fullscreen), on clique programmatiquement
       // le lien de l'onglet cible dans la bottom nav d'Instagram.
       //
+      // --- Blocage tactile du scroll sur /explore/ idle ----------------
+      //
+      // Ni overflow:hidden ni position:fixed sur body ne bloquent le
+      // scroll sur Instagram mobile web parce qu'Instagram fait defiler
+      // un conteneur interne (pas body). La seule methode fiable sur
+      // iOS WKWebView : intercepter touchmove en capture phase avec
+      // passive:false et appeler preventDefault().
+      //
+      // Le flag est synchronise par updateRouteMarker a chaque tick
+      // (et par la boucle rAF ci-dessous pour la detection instantanee).
+      var exploreScrollBlocked = false;
+
+      function installExploreScrollBlock() {
+        document.addEventListener('touchmove', function(e) {
+          if (exploreScrollBlocked) {
+            try { e.preventDefault(); } catch (err) {}
+          }
+        }, { passive: false, capture: true });
+      }
+
       function start() {
         injectReelsWaitingOverlay();
         injectExploreEmptyState();
+        installExploreScrollBlock();
         // Premier full scan : updateRouteMarker + tous les scanners
         // (sponsored, suggestions, reels, explore, DM, etc.).
         fullScan();
@@ -1272,6 +1294,24 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           origReplaceState.apply(this, arguments);
           try { fullScan(); } catch (e) {}
         };
+
+        // --- Detection de route par requestAnimationFrame -------------
+        //
+        // Filet de securite en plus du monkey-patch pushState : on
+        // verifie le pathname a chaque frame (~16ms = 60fps). Si le
+        // path a change (par un mecanisme qu'on n'aurait pas intercepte),
+        // on lance updateRouteMarker immediatement. Le cout est negligeable
+        // (une comparaison de string par frame).
+        var rAFLastPath = location.pathname || '';
+        function rAFRouteCheck() {
+          var p = location.pathname || '';
+          if (p !== rAFLastPath) {
+            rAFLastPath = p;
+            try { updateRouteMarker(); } catch (e) {}
+          }
+          requestAnimationFrame(rAFRouteCheck);
+        }
+        requestAnimationFrame(rAFRouteCheck);
 
         post({ type: 'ready', platform: 'instagram' });
       }
