@@ -45,5 +45,12 @@
  *               Nouvelle approche : identifier la video "courante"
  *               et cacher les conteneurs des videos additionnelles
  *               (les Reels suivants rendus en dessous par Instagram).
+ *   Alpha 2.6 — ajout position:relative sur body reel-locked pour
+ *               que les Reels en position:absolute (utilises par
+ *               Instagram) soient enfin clippes par notre
+ *               overflow-y:hidden. Safety supplementaire sur le
+ *               scan video : ne cacher que les conteneurs physi-
+ *               quement en dessous du Reel courant (protege la
+ *               barre de reponse).
  */
-export const APP_VERSION = 'Alpha 2.5';
+export const APP_VERSION = 'Alpha 2.6';

@@ -266,14 +266,19 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
          overflow-y: hidden + max-height: 100vh pour clipper tout
          contenu qui dépasse verticalement — c'est ce qui causait
          la "bande noire" en bas (debut du Reel suivant ou section
-         suggestions rendue dans le DOM). Instagram mobile web
-         empile les Reels dans une meme colonne, on constraint juste
-         la zone visible a la hauteur du viewport. */
+         suggestions rendue dans le DOM).
+         position: relative est CRUCIAL : Instagram utilise
+         position: absolute sur ses cards de Reel, et les elements
+         absolus sont clippes par le premier ancetre positionne.
+         Sans position: relative sur body, les cards absolues
+         remontent jusqu'a html/viewport et echappent a notre
+         overflow: hidden. */
       overflow-x: visible !important;
       overflow-y: hidden !important;
       max-height: 100vh !important;
       max-width: 100vw !important;
       min-width: 0 !important;
+      position: relative !important;
     }
 
     /* Nuclear : on force overflow: visible + max-width + clip: auto
@@ -1130,6 +1135,9 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }
         if (currentVideoIndex === -1) { return; }
 
+        var currentRect = videos[currentVideoIndex].getBoundingClientRect
+          ? videos[currentVideoIndex].getBoundingClientRect()
+          : null;
         for (var w = 0; w < videos.length; w++) {
           if (w === currentVideoIndex) { continue; }
           var vid = videos[w];
@@ -1147,6 +1155,15 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
             if (container.offsetHeight > window.innerHeight * 0.7) { continue; }
             // Safety : ne jamais englober le Reel courant.
             if (container.contains(videos[currentVideoIndex])) { continue; }
+            // Safety : ne cacher QUE si le conteneur est physiquement
+            // en dessous du Reel courant. Ca evite de cacher un
+            // conteneur qui serait a cote ou au-dessus (p.ex. un
+            // conteneur qui inclut aussi la barre de reponse).
+            if (currentRect) {
+              var cRect = container.getBoundingClientRect
+                ? container.getBoundingClientRect() : null;
+              if (cRect && cRect.top < currentRect.bottom - 50) { continue; }
+            }
             hide(container, 'next-reel-below');
           }
         }
