@@ -236,10 +236,20 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        pour eviter les effets de bord (bande noire, boutons coupes,
        barre de reponse qui disparait).
        ----------------------------------------------------------------- */
-       a rappele que ca rentre mieux dans la philosophie "fenetre
-       filtree, pas experience censuree" : reagir a un Reel qu'un ami
-       a partage reste un geste social legitime. Seul le SCROLL
-       VERTICAL reste bloque pour empecher de tomber dans l'algo. */
+
+    /* Force la visibilite du placeholder de la barre de reponse dans
+       les DM Reels. Dans certaines conversations, le CSS Instagram
+       applique color:rgb(12,16,20) (noir) au parent de la textarea
+       sur fond gris fonce rgba(43,48,54,0.8). Le placeholder herite
+       de cette couleur et devient invisible (noir sur noir), ce qui
+       donne l'impression que la barre de reponse est une "bande noire".
+       En forcant le placeholder en blanc on retablit la lisibilite. */
+    body.authentique-reel-locked textarea::placeholder,
+    body.authentique-reel-locked input::placeholder {
+      color: rgba(245, 245, 245, 0.7) !important;
+      -webkit-text-fill-color: rgba(245, 245, 245, 0.7) !important;
+      opacity: 1 !important;
+    }
 
     /* -----------------------------------------------------------------
        Etat vide de la page Explore (loupe) en mode idle

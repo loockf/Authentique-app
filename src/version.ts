@@ -67,9 +67,12 @@
  *   Alpha 4.0 — retire le forcing de taille sur la video.
  *   Alpha 4.1 — retire tout forcing (header OK mais bande droite
  *               cache les boutons d'action).
- *   Alpha 4.2 — forcing UNIQUEMENT sur la largeur des ancetres
- *               (min-width:100vw + max-width:none + --x-width:100vw).
- *               Pas de forcing sur la hauteur pour garder le header
- *               visible.
+ *   Alpha 4.2 — forcing UNIQUEMENT sur la largeur des ancetres.
+ *   Alpha 4.3 — fix placeholder invisible dans DM Reels : dans
+ *               certaines conversations, le CSS Instagram hereite
+ *               color:rgb(12,16,20) sur le placeholder de la barre
+ *               de reponse, le rendant noir sur fond gris fonce
+ *               (invisible = "bande noire"). On force le placeholder
+ *               en blanc.
  */
-export const APP_VERSION = 'Alpha 4.2';
+export const APP_VERSION = 'Alpha 4.3';
