@@ -652,23 +652,21 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           var vids = document.querySelectorAll('video');
           for (var vi = 0; vi < vids.length; vi++) {
             if (vids[vi].offsetHeight >= 200) {
-              // Video elle-meme : full-viewport + override la variable
-              // CSS que Instagram utilise pour calculer la largeur.
-              vids[vi].style.setProperty('min-height', '100vh', 'important');
-              vids[vi].style.setProperty('height', '100vh', 'important');
-              vids[vi].style.setProperty('min-width', '100vw', 'important');
-              vids[vi].style.setProperty('width', '100vw', 'important');
-              vids[vi].style.setProperty('object-fit', 'cover', 'important');
-              vids[vi].style.setProperty('--x-width', '100vw');
-              vids[vi].style.setProperty('--x-height', '100vh');
-              vids[vi].style.setProperty('--x-maxWidth', '100vw');
+              // On NE force PAS de taille sur la video elle-meme.
+              // Instagram la dimensionne correctement a l'ouverture
+              // (header visible, bonne proportion). C'est apres le
+              // chargement des Suggestions qu'Instagram retrecit les
+              // CONTENEURS, ce qui comprime la video. On empeche ce
+              // retrecissement en forcant min-height/min-width sur
+              // les ancetres, et la video suit naturellement via son
+              // CSS d'origine (height: var(--x-height) = 100% du parent).
+              //
+              // Forcer height:100vh sur la video AGRANDISSAIT la video
+              // au-dela de sa taille naturelle, poussant le header ami
+              // au-dessus du viewport.
 
-              // Remonter TOUS les ancetres. On utilise min-height/
-              // min-width (pas height/width) pour que les conteneurs
-              // puissent rester plus grands que 100vh si Instagram
-              // en a besoin (par exemple pour que le header au-dessus
-              // du Reel ait sa place). max-height: none supprime les
-              // contraintes d'Instagram.
+              // Remonter TOUS les ancetres et empecher Instagram de
+              // les retrecir en-dessous de la taille viewport.
               var ancestor = vids[vi].parentElement;
               var ad = 0;
               while (ancestor && ancestor !== document.body && ad < 12) {

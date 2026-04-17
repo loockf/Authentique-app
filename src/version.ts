@@ -63,9 +63,11 @@
  *   Alpha 3.7 — HiddenBadge en absolute (a casse la nav dans les
  *               autres onglets, et n'a pas fix le header DM).
  *   Alpha 3.8 — revert HiddenBadge + min-height au lieu de height.
- *   Alpha 3.9 — fix scroll bypass (bloque TOUS les touchmove en DM
- *               Reel, pas juste les verticaux) + fix header coupe
- *               (force scrollTop=0 lors de l'ouverture d'un DM Reel
- *               pour ramener le header visible en haut).
+ *   Alpha 3.9 — fix scroll bypass + scrollTop=0.
+ *   Alpha 4.0 — retire le forcing de taille sur la video elle-meme
+ *               (height/width/min-height/min-width). Seuls les
+ *               ancetres gardent min-height:100vh pour empecher
+ *               Instagram de les retrecir. La video suit sa taille
+ *               naturelle (header visible, bonne proportion).
  */
-export const APP_VERSION = 'Alpha 3.9';
+export const APP_VERSION = 'Alpha 4.0';
