@@ -50,9 +50,12 @@
  *   Alpha 2.8 — video full-viewport (echec, aucun effet visible).
  *   Alpha 2.9 — hack viewport : viewport-fit=cover. La video est
  *               full-screen au chargement mais retrecit apres.
- *   Alpha 3.0 — force brute : re-applique min-height:100vh sur la
- *               video ET ses 3 premiers ancetres a chaque tick de
- *               poll pour contrer le recalcul de layout d'Instagram
- *               apres le chargement des "Suggestions".
+ *   Alpha 3.0 — force brute (echec partiel).
+ *   Alpha 3.1 — TABLE RASE DM Reels. Suppression de tout le CSS
+ *               reel-locked (overflow, clip-path, descendants) et de
+ *               scanReelOverlaySuggestions. Ne reste que :
+ *               1) touchmove handler pour bloquer le scroll
+ *               2) inline style video 100vh + object-fit:cover
+ *               3) viewport-fit:cover sur meta tag
  */
-export const APP_VERSION = 'Alpha 3.0';
+export const APP_VERSION = 'Alpha 3.1';

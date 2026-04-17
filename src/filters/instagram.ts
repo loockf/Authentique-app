@@ -228,83 +228,14 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     /* -----------------------------------------------------------------
        Lock vertical swipe sur un Reel individuel OU modal DM
        -----------------------------------------------------------------
-       Deux cas ciblent ce lock :
-
-       1. /reel/<id>/ — page singleton d'un Reel ouvert depuis un lien
-          partage. C'est detecte par pathname.
-       2. /direct/... avec un Reel-modal ouvert — Instagram garde la
-          route DM mais affiche le Reel en overlay fullscreen par-dessus
-          la conversation. Detecte par la presence d'une <video>
-          couvrant la majorite du viewport + route /direct/.
-
-       Dans les deux cas, l'utilisateur doit pouvoir regarder le Reel
-       et le fermer, pas glisser dans le fil algorithmique qui suit.
-
-       Le lock combine deux mecanismes *sans* toucher a l'overflow :
-         - touch-action: pan-x pour empecher Safari iOS d'interpreter
-           un swipe vertical au niveau natif.
-         - overscroll-behavior: none pour eviter les effets de rebond
-           qui pourraient contourner le lock.
-         - Un handler touchmove en JS qui preventDefault tout pan
-           vertical quand la classe est active (voir
-           syncReelLockTouchHandler — attache dynamiquement pour ne
-           pas polluer les scrolls normaux).
-
-       Historique : un commit precedent ajoutait aussi overflow: hidden
-       sur body/main/[role="main"]. Probleme : ca clippait horizontalement
-       le layout Instagram des Reels, dont les boutons d'action (heart,
-       comment, share) debordent legerement a droite du viewport. Les
-       boutons se retrouvaient caches derriere une "bande noire". Retire.
+       Approche minimaliste : ZERO CSS sur body.authentique-reel-locked.
+       Le seul mecanisme de blocage est le touchmove handler en JS
+       (syncReelLockTouchHandler). La vidéo est forcee a 100vh via
+       inline style dans updateRouteMarker. On ne touche pas au layout
+       d'Instagram (pas d'overflow, pas de clip-path, pas de max-width)
+       pour eviter les effets de bord (bande noire, boutons coupes,
+       barre de reponse qui disparait).
        ----------------------------------------------------------------- */
-    body.authentique-reel-locked,
-    body.authentique-reel-locked main,
-    body.authentique-reel-locked [role="main"] {
-      overscroll-behavior: none !important;
-      touch-action: pan-x !important;
-      overflow: visible !important;
-      max-width: 100vw !important;
-      min-width: 0 !important;
-    }
-
-    /* La video du Reel remplit la hauteur totale du viewport, comme
-       dans l'app Instagram native. object-fit: cover adapte le ratio
-       en croppant legerement les bords si necessaire. Plus de gap
-       entre la video et le bas de l'ecran = plus de "bande noire"
-       ou de Reel suivant visible. Les elements UI (pseudo, boutons
-       d'action, barre de reponse) sont superposes par Instagram en
-       position fixed/absolute et restent visibles par-dessus. */
-    body.authentique-reel-locked video {
-      min-height: 100vh !important;
-      object-fit: cover !important;
-    }
-
-    /* Hack viewport : faire croire a Instagram que le contenu est
-       plus haut qu'il ne l'est. Combine avec viewport-fit=cover pose
-       sur le meta viewport, ca pousse Instagram a calculer ses
-       hauteurs sur une base plus generewe, eliminant le gap. */
-    html.authentique-reel-locked-html,
-    body.authentique-reel-locked {
-      min-height: 100vh !important;
-    }
-
-    /* Nuclear : on force overflow: visible + max-width + clip: auto
-       sur TOUS les descendants du lock. Instagram place les boutons
-       d'action du reel (heart, comment, share, save) dans un conteneur
-       qui peut avoir un max-width plus etroit que le viewport, OU un
-       overflow: hidden sur un ancetre profond. L'un des deux cause la
-       "bande noire" horizontale qui cache les boutons. On force les
-       deux a visible pour deboucher tout ce qui pourrait etre clipe. */
-    body.authentique-reel-locked *:not(video):not(input):not(textarea) {
-      overscroll-behavior: none !important;
-      touch-action: pan-x !important;
-      overflow: visible !important;
-      max-width: 100vw !important;
-      clip-path: none !important;
-      clip: auto !important;
-    }
-
-    /* Note : on ne masque PLUS les boutons d'action (like, comment,
-       partager, save) dans le scope reel-locked. L'utilisateur nous
        a rappele que ca rentre mieux dans la philosophie "fenetre
        filtree, pas experience censuree" : reagir a un Reel qu'un ami
        a partage reste un geste social legitime. Seul le SCROLL
@@ -722,13 +653,12 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // Dans les deux cas on tue la snap-pagination pour empecher
         // l'utilisateur de glisser dans le fil algorithmique Reels.
         var shouldLock = isIndividualReelRoute() || isDMReelOverlayOpen();
+        // La body class est gardee pour que d'autres parties du code
+        // puissent tester si on est en reel-lock. Aucun CSS ne l'utilise
+        // dans cette version table-rase — tout est gere par JS inline.
         document.body.classList.toggle('authentique-reel-locked', shouldLock);
-        if (document.documentElement) {
-          document.documentElement.classList.toggle('authentique-reel-locked-html', shouldLock);
-        }
         // Attache/detache dynamiquement le touchmove handler qui
-        // bloque les swipes verticaux — presence a meme d'eviter
-        // l'overhead d'un listener touchmove sur chaque scroll normal.
+        // bloque les swipes verticaux.
         syncReelLockTouchHandler(shouldLock);
 
         // --- Force le Reel DM a rester full-viewport ---------------------
@@ -1141,7 +1071,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         scanReelsFullscreen();
         scanExplore();
         scanDirectSuggestions();
-        scanReelOverlaySuggestions();
+        // scanReelOverlaySuggestions retire — approche table rase.
         closeOpenInAppBanners();
       }
 
@@ -1149,95 +1079,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // Quand un ami nous partage un Reel en DM et qu'on l'ouvre, Instagram
       // charge aussi les reels suivants en-dessous sous un header
       // "Suggestions" ou "Plus de Reels". On les masque pour que
-      // l'utilisateur ne soit pas tente de scroller vers l'algo.
-      //
-      // Ne tourne QUE quand isDMReelOverlayOpen() est vrai, donc pas de
-      // risque de masquer du contenu legitime dans l'inbox ou un thread.
-      var REEL_OVERLAY_SUGGEST_NEEDLES = [
-        'Suggestions',
-        'Suggestions pour vous',
-        'Suggested for you',
-        'Plus de Reels',
-        'More Reels',
-        'Reels suggérés',
-        'Suggested reels',
-      ];
-      function scanReelOverlaySuggestions() {
-        if (!isDMReelOverlayOpen()) { return; }
-
-        // Etape 1 : cacher le label "Suggestions" lui-meme (souvent
-        // un span ou div sans enfants). On le cache LUI, pas son
-        // parent, pour eviter l'ecran noir qu'un walk-up causerait.
-        var labels = document.querySelectorAll('span, div');
-        for (var k = 0; k < labels.length; k++) {
-          var lbl = labels[k];
-          if (lbl.classList.contains('authentique-hidden')) { continue; }
-          if (lbl.children && lbl.children.length > 0) { continue; }
-          if (lbl.offsetHeight > 50) { continue; }
-          var lt = (lbl.textContent || '').trim();
-          for (var m = 0; m < REEL_OVERLAY_SUGGEST_NEEDLES.length; m++) {
-            if (lt === REEL_OVERLAY_SUGGEST_NEEDLES[m]) {
-              hide(lbl, 'reel-suggestion-label');
-              break;
-            }
-          }
-        }
-
-        // Etape 2 : cacher les Reels "suivants" rendus en dessous du
-        // Reel courant. Instagram mobile web les empile dans le DOM
-        // pour le snap-scroll. On identifie la video "courante"
-        // (premiere avec hauteur substantielle) et on cache les
-        // conteneurs des videos additionnelles.
-        //
-        // Cette approche remplace l'ancienne etape 2 qui faisait un
-        // walk-up depuis le heading "Suggestions" — risquee parce
-        // que le conteneur trouve pouvait aussi contenir la barre
-        // de reponse, la faisant disparaitre.
-        var videos = document.querySelectorAll('video');
-        var currentVideoIndex = -1;
-        for (var v = 0; v < videos.length; v++) {
-          if (videos[v].offsetHeight >= 200 &&
-              !videos[v].closest('.authentique-hidden')) {
-            currentVideoIndex = v;
-            break;
-          }
-        }
-        if (currentVideoIndex === -1) { return; }
-
-        var currentRect = videos[currentVideoIndex].getBoundingClientRect
-          ? videos[currentVideoIndex].getBoundingClientRect()
-          : null;
-        for (var w = 0; w < videos.length; w++) {
-          if (w === currentVideoIndex) { continue; }
-          var vid = videos[w];
-          if (vid.closest('.authentique-hidden')) { continue; }
-          // Remonter 2 niveaux max pour trouver le conteneur direct
-          var container = vid.parentElement;
-          var depth = 0;
-          while (container && container !== document.body && depth < 2) {
-            if (container.offsetHeight >= 100) { break; }
-            container = container.parentElement;
-            depth++;
-          }
-          if (container && container !== document.body) {
-            // Safety : jamais cacher plus de 70% du viewport.
-            if (container.offsetHeight > window.innerHeight * 0.7) { continue; }
-            // Safety : ne jamais englober le Reel courant.
-            if (container.contains(videos[currentVideoIndex])) { continue; }
-            // Safety : ne cacher QUE si le conteneur est physiquement
-            // en dessous du Reel courant. Ca evite de cacher un
-            // conteneur qui serait a cote ou au-dessus (p.ex. un
-            // conteneur qui inclut aussi la barre de reponse).
-            if (currentRect) {
-              var cRect = container.getBoundingClientRect
-                ? container.getBoundingClientRect() : null;
-              if (cRect && cRect.top < currentRect.bottom - 50) { continue; }
-            }
-            hide(container, 'next-reel-below');
-          }
-        }
-      }
-
       /**
        * Injecte l'overlay "En attente d'un Reel de tes amis..." dans
        * le body. Le div existe en permanence mais reste cache par defaut
