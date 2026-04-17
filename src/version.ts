@@ -58,10 +58,12 @@
  *               mais parents 6-8 toujours contraignants).
  *   Alpha 3.5 — extend walk-up a tous les ancetres (video full-screen
  *               fonctionne, mais header coupe en haut).
- *   Alpha 3.6 — retrait du hack viewport-fit:cover qui poussait le
- *               contenu sous le status bar iOS. Le walk-up JS suffit
- *               pour forcer les dimensions, viewport-fit n'est plus
- *               necessaire. Le header (ami qui partage le Reel) ne
- *               devrait plus etre coupe.
+ *   Alpha 3.6 — retrait viewport-fit:cover (sans effet sur le
+ *               header coupe).
+ *   Alpha 3.7 — HiddenBadge passe en position:absolute bottom:0.
+ *               La bande n'occupe plus d'espace en flex donc le
+ *               WebView recupere sa hauteur complete. Instagram a
+ *               plus de place pour rendre son header DM sans le
+ *               couper.
  */
-export const APP_VERSION = 'Alpha 3.6';
+export const APP_VERSION = 'Alpha 3.7';

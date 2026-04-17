@@ -41,9 +41,16 @@ export function HiddenBadge({ count }: { count: number }) {
 
 const styles = StyleSheet.create({
   strip: {
-    // Bande fine, pleine largeur, au-dessus de la tab bar RN.
-    // Pas de position: absolute : elle fait partie du flex layout
-    // parent et repousse legerement le WebView vers le haut.
+    // Bande fine, pleine largeur, absolue au bas du conteneur parent.
+    // position: absolute pour qu'elle n'influence pas la hauteur du
+    // WebView — le WebView occupe 100% de la hauteur disponible et la
+    // bande flotte par-dessus ses ~22px inferieurs. pointer-events:
+    // none garantit qu'elle ne bloque pas les taps sur l'UI Instagram
+    // qui pourrait etre dans cette zone.
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -51,9 +58,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    // `pointerEvents` dans le style sur la New Architecture ; la bande
-    // n'est pas interactive, ce qui evite qu'un tap accidentel soit
-    // mange par elle.
     pointerEvents: 'none',
   },
   text: {
