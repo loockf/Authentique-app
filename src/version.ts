@@ -73,15 +73,11 @@
  *   Alpha 4.5 — FINAL DM Reels.
  *   Alpha 4.6 — 5 ameliorations UX.
  *   Alpha 4.7 — fix flash Reels lors du changement d'onglet.
- *   Alpha 4.8 — ameliorations scroll et ergonomie :
- *               - long-press bouton flottant 150ms -> 100ms
- *               - revert fond noir (retour colors.background)
- *               - detection scroll via touch events (plus fiable
- *                 que 'scroll' qui ne bubble pas)
- *               - inertie 400ms apres touchend avant reprise scans
- *               - rAF route check -> setInterval 100ms (moins
- *                 d'overhead par frame pendant le scroll)
- *               - skip du 1500ms interval (banners/route) pendant
- *                 scroll actif aussi
+ *   Alpha 4.8 — ameliorations scroll (abandonnees).
+ *   Alpha 4.9 — revert de tout le code de fluidite scroll (touch
+ *               listeners, scrollActiveUntil, skip pendant inertie).
+ *               Philosophie Authentique : on ne gere que ce qu'on
+ *               veut pas voir, le scroll reste sous le controle
+ *               d'Instagram. Long-press 100ms conserve.
  */
-export const APP_VERSION = 'Alpha 4.8';
+export const APP_VERSION = 'Alpha 4.9';
