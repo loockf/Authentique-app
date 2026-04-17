@@ -663,24 +663,32 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
         // --- Force le Reel DM a rester full-viewport ---------------------
         //
-        // Le hack viewport-fit=cover fait qu'Instagram dimensionne le
-        // Reel correctement AU DEPART. Mais apres le chargement des
-        // "Suggestions" en dessous, Instagram recalcule son layout et
-        // retrecit le Reel pour faire de la place. On re-force les
-        // dimensions inline a chaque tick pour contrer ce recalcul.
+        // Deux cas observes en test :
+        //   Cas 1 : bande noire a DROITE (conteneur a un max-width
+        //           plus petit que le viewport)
+        //   Cas 2 : bande noire en BAS (conteneur a une hauteur fixe
+        //           plus petite que le viewport)
+        //
+        // On force width + height + remove les contraintes max-width
+        // sur la video ET ses 4 premiers ancetres a chaque tick.
         if (shouldLock) {
           var vids = document.querySelectorAll('video');
           for (var vi = 0; vi < vids.length; vi++) {
             if (vids[vi].offsetHeight >= 200) {
               vids[vi].style.setProperty('min-height', '100vh', 'important');
               vids[vi].style.setProperty('height', '100vh', 'important');
+              vids[vi].style.setProperty('min-width', '100vw', 'important');
+              vids[vi].style.setProperty('width', '100vw', 'important');
               vids[vi].style.setProperty('object-fit', 'cover', 'important');
-              // Force aussi les 3 premiers ancetres a min-height:100vh
-              // pour que le conteneur ne contraigne pas la video.
+              // Force les 4 premiers ancetres a prendre tout le viewport
+              // en hauteur ET en largeur, et retire les max-width.
               var ancestor = vids[vi].parentElement;
               var ad = 0;
-              while (ancestor && ancestor !== document.body && ad < 3) {
+              while (ancestor && ancestor !== document.body && ad < 4) {
                 ancestor.style.setProperty('min-height', '100vh', 'important');
+                ancestor.style.setProperty('min-width', '100vw', 'important');
+                ancestor.style.setProperty('max-width', 'none', 'important');
+                ancestor.style.setProperty('overflow', 'hidden', 'important');
                 ancestor = ancestor.parentElement;
                 ad++;
               }
