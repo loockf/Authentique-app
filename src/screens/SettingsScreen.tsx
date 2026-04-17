@@ -40,7 +40,7 @@ const TOGGLES: Toggle[] = [
   {
     key: 'hideReels',
     label: 'Masquer les Reels suggérés',
-    description: 'Vidéos courtes de comptes que vous ne suivez pas',
+    description: 'Blocs « Reels et plus » parfois insérés dans le fil d\'actualité',
   },
   {
     key: 'navSnapToEdge',

@@ -5,7 +5,6 @@ import { FilteredWebView } from '../components/FilteredWebView';
 import { HiddenBadge } from '../components/HiddenBadge';
 import { useFilters } from '../context/FiltersContext';
 import { buildInstagramFilters } from '../filters/instagram';
-import { colors } from '../theme/colors';
 
 /**
  * Écran Instagram : WebView plein écran + badge discret.
@@ -31,12 +30,16 @@ export function InstagramScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Fond noir pour matcher le theme sombre d'Instagram mobile web.
+  // Evite le flash blanc au lancement/reload : Instagram affiche
+  // toujours un fond noir, on se cale dessus pour une transition
+  // visuelle invisible.
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#000000',
   },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#000000',
   },
 });

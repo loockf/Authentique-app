@@ -70,14 +70,14 @@
  *   Alpha 4.2 — forcing UNIQUEMENT sur la largeur des ancetres.
  *   Alpha 4.3 — placeholder fix (sans effet).
  *   Alpha 4.4 — broader color forcing (sans effet).
- *   Alpha 4.5 — FINAL DM Reels. L'effet "bande noire" sur la barre
- *               de reponse dans certaines conversations n'est pas
- *               reproductible en forcant les couleurs CSS parce que
- *               c'est un bug d'Instagram mobile web lui-meme
- *               (confirme en ouvrant instagram.com directement dans
- *               Arc/Safari). On revert le color forcing inutile.
- *               Etat final : video full-screen, header visible,
- *               boutons visibles, scroll bloque, scroll bypass
- *               bloque, scrollTop=0, width forcee sur ancetres.
+ *   Alpha 4.5 — FINAL DM Reels.
+ *   Alpha 4.6 — 5 ameliorations UX :
+ *               - description toggle hideReels plus claire
+ *               - long-press bouton flottant 200ms -> 150ms
+ *               - fond noir sur InstagramScreen (match dark theme)
+ *               - compteur "elements masques" limite au fil
+ *                 d'actualite (pas sur explore/reels/DM)
+ *               - fluidite scroll : skip fullScan pendant scroll
+ *                 actif (150ms apres dernier event scroll)
  */
-export const APP_VERSION = 'Alpha 4.5';
+export const APP_VERSION = 'Alpha 4.6';

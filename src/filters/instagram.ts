@@ -364,12 +364,24 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         } catch (e) {}
       }
 
+      function isHomeFeedRoute() {
+        var p = location.pathname || '';
+        return p === '' || p === '/';
+      }
+
       function hide(el, reason) {
         if (!el || el.classList.contains('authentique-hidden')) { return false; }
         el.classList.add('authentique-hidden');
         el.setAttribute('data-authentique-reason', reason);
-        hiddenCount++;
-        post({ type: 'hidden-count', count: hiddenCount });
+        // Le compteur "elements masques" ne reflete que le fil
+        // d'actualite. Sur les autres routes (explore, reels, DM),
+        // on masque quand meme l'element mais on ne l'incremente
+        // pas — la loupe par exemple est bloquee par default et
+        // n'est pas censee generer du contenu utile a compter.
+        if (isHomeFeedRoute()) {
+          hiddenCount++;
+          post({ type: 'hidden-count', count: hiddenCount });
+        }
         return true;
       }
 
@@ -388,8 +400,10 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         if (el.classList.contains('authentique-hidden-flow')) { return false; }
         el.classList.add('authentique-hidden-flow');
         el.setAttribute('data-authentique-reason', reason);
-        hiddenCount++;
-        post({ type: 'hidden-count', count: hiddenCount });
+        if (isHomeFeedRoute()) {
+          hiddenCount++;
+          post({ type: 'hidden-count', count: hiddenCount });
+        }
         return true;
       }
 
@@ -1282,26 +1296,35 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         fullScan();
 
         // ------------------------------------------------------------------
-        // STRATEGIE DE SCAN — POLLING FIXE
+        // STRATEGIE DE SCAN — POLLING + SKIP PENDANT SCROLL ACTIF
         // ------------------------------------------------------------------
-        // On a essaye (dans l'ordre) :
-        //  1. rAF leading edge -> scans a chaque frame, saturait le main
-        //     thread pendant un scroll
-        //  2. Trailing debounce 200ms -> mieux, mais les mutations continues
-        //     d'Instagram empechaient les scans de se declencher ou les
-        //     rendaient irreguliers
-        //  3. Leading-edge + throttle 300ms -> toujours jank car le
-        //     MutationObserver lui-meme est cher quand Instagram tire
-        //     des mutations en continu (stories timers, typing indicators,
-        //     animations d'actions)
+        // Historique : setInterval(fullScan, 500) tournait en permanence.
+        // Ca scannait 2 fois par seconde meme en plein scroll utilisateur,
+        // ce qui causait un jank perceptible (querySelectorAll sur tous les
+        // articles/headings/videos a chaque tick).
         //
-        // Version finale : on supprime completement le MutationObserver et
-        // on remplace par un setInterval(fullScan, 500). Zero overhead au
-        // niveau mutation, comportement prévisible, scans limites a 2/sec.
-        // Trade-off : un nouveau post ajoute par Instagram peut apparaitre
-        // ~500ms avant d'etre filtre. Acceptable vs. un scroll saccade.
+        // Version actuelle : on detecte le scroll actif (evenement 'scroll'
+        // sur window ou sur tout element). Tant que scrollActiveUntil est
+        // dans le futur, fullScan skip completement. Apres 150ms sans
+        // nouvel evenement scroll, on reprend le polling normal.
+        //
+        // Trade-off : un nouveau post charge par Instagram pendant que tu
+        // scrolles n'est filtre qu'apres l'arret du scroll (+ 150ms + 500ms).
+        // Mais le scroll lui-meme est aussi fluide que sur Instagram web.
         // ------------------------------------------------------------------
-        setInterval(fullScan, 500);
+        var scrollActiveUntil = 0;
+        var SCROLL_QUIET_MS = 150;
+        // Un handler scroll passif, pose en capture pour attraper tous
+        // les scroll containers, y compris ceux qu'Instagram utilise
+        // (certains posts ou sections ont leur propre scroll interne).
+        document.addEventListener('scroll', function() {
+          scrollActiveUntil = Date.now() + SCROLL_QUIET_MS;
+        }, { passive: true, capture: true });
+
+        setInterval(function() {
+          if (Date.now() < scrollActiveUntil) { return; }
+          fullScan();
+        }, 500);
 
         // Check périodique separement pour les bandeaux qui apparaissent
         // en différé (install app) et le marqueur de route sur navigations
