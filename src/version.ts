@@ -68,11 +68,10 @@
  *   Alpha 4.1 — retire tout forcing (header OK mais bande droite
  *               cache les boutons d'action).
  *   Alpha 4.2 — forcing UNIQUEMENT sur la largeur des ancetres.
- *   Alpha 4.3 — fix placeholder invisible dans DM Reels : dans
- *               certaines conversations, le CSS Instagram hereite
- *               color:rgb(12,16,20) sur le placeholder de la barre
- *               de reponse, le rendant noir sur fond gris fonce
- *               (invisible = "bande noire"). On force le placeholder
- *               en blanc.
+ *   Alpha 4.3 — placeholder fix (insuffisant, bande noire persiste).
+ *   Alpha 4.4 — force plus largement la couleur de texte dans tout
+ *               le conteneur de la textarea (div:has(> textarea) + *),
+ *               pas juste le placeholder. Cible aussi
+ *               ::-webkit-input-placeholder pour Safari iOS.
  */
-export const APP_VERSION = 'Alpha 4.3';
+export const APP_VERSION = 'Alpha 4.4';
