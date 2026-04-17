@@ -129,6 +129,10 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         thirdPartyCookiesEnabled={true}
         cacheEnabled={true}
         incognito={false}
+        // Active Safari Web Inspector sur le WebView (iOS 16.4+).
+        // Necessaire pour debugger le DOM d'Instagram depuis Safari
+        // sur Mac. A desactiver avant un build production.
+        webviewDebuggingEnabled={true}
         // --- Injection ---------------------------------------------------
         injectedJavaScriptBeforeContentLoaded={installScript}
         injectedJavaScript={installScript}

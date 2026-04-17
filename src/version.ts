@@ -52,8 +52,8 @@
  *               full-screen au chargement mais retrecit apres.
  *   Alpha 3.0 — force brute (echec partiel).
  *   Alpha 3.1 — TABLE RASE DM Reels. Scroll block + video sizing.
- *   Alpha 3.2 — fix bande noire droite + bas : force aussi
- *               min-width:100vw + max-width:none + overflow:hidden
- *               sur la video et ses 4 premiers ancetres.
+ *   Alpha 3.2 — fix bande noire droite + bas (echec).
+ *   Alpha 3.3 — webviewDebuggingEnabled:true pour activer Safari
+ *               Web Inspector. Permet de debugger le DOM d'Instagram.
  */
-export const APP_VERSION = 'Alpha 3.2';
+export const APP_VERSION = 'Alpha 3.3';
