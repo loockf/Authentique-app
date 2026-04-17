@@ -349,6 +349,10 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // Flag pour ne reset le scrollTop qu'une seule fois par ouverture
       // de DM Reel (pas a chaque tick de poll).
       var reelScrollReset = false;
+      // Timer pour retarder le retrait de l'overlay Reels quand on
+      // quitte /reels/ — evite le flash de contenu pendant la
+      // transition vers un autre onglet.
+      var reelsOverlayRemoveTimer = null;
       // Compteur de ticks consecutifs ou le Reel courant ressemble
       // a celui d'un ami (video visible + pas de "Suivre"). On exige
       // 3 ticks avant de retirer l'overlay pour eviter les faux
@@ -631,10 +635,27 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
         // L'onglet Reels est le territoire de Meta. Authentique n'a pas
         // a le conquerir. On pose simplement l'overlay informatif quand
-        // on est sur /reels/ — pas de detection d'amis, pas d'auto-skip,
-        // pas de manipulation DOM. Juste un message clair.
+        // on est sur /reels/.
+        //
+        // Quand on QUITTE /reels/, on retarde la suppression de
+        // l'overlay de 500ms pour que la page de destination ait le
+        // temps de se charger. Sans ce delai, le contenu Reels flash
+        // visiblement pendant la transition entre onglets.
         var showReelsOverlay = isReelsFeedRoute();
-        document.body.classList.toggle('authentique-on-reels', showReelsOverlay);
+        if (showReelsOverlay) {
+          if (reelsOverlayRemoveTimer) {
+            clearTimeout(reelsOverlayRemoveTimer);
+            reelsOverlayRemoveTimer = null;
+          }
+          document.body.classList.add('authentique-on-reels');
+        } else if (document.body.classList.contains('authentique-on-reels')) {
+          if (!reelsOverlayRemoveTimer) {
+            reelsOverlayRemoveTimer = setTimeout(function() {
+              document.body.classList.remove('authentique-on-reels');
+              reelsOverlayRemoveTimer = null;
+            }, 500);
+          }
+        }
 
         // Le lock du swipe vertical s'applique dans deux cas :
         //  1. /reel/<id>/ — Reel ouvert via URL singleton (lien partage)

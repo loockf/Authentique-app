@@ -71,13 +71,10 @@
  *   Alpha 4.3 — placeholder fix (sans effet).
  *   Alpha 4.4 — broader color forcing (sans effet).
  *   Alpha 4.5 — FINAL DM Reels.
- *   Alpha 4.6 — 5 ameliorations UX :
- *               - description toggle hideReels plus claire
- *               - long-press bouton flottant 200ms -> 150ms
- *               - fond noir sur InstagramScreen (match dark theme)
- *               - compteur "elements masques" limite au fil
- *                 d'actualite (pas sur explore/reels/DM)
- *               - fluidite scroll : skip fullScan pendant scroll
- *                 actif (150ms apres dernier event scroll)
+ *   Alpha 4.6 — 5 ameliorations UX.
+ *   Alpha 4.7 — fix flash Reels lors du changement d'onglet :
+ *               retarde le retrait de l'overlay noir de 500ms quand
+ *               on quitte /reels/, pour que la page de destination
+ *               ait le temps de se charger et couvrir le contenu.
  */
-export const APP_VERSION = 'Alpha 4.6';
+export const APP_VERSION = 'Alpha 4.7';
