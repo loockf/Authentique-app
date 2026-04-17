@@ -648,43 +648,10 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         //   2. Remonter du video jusqu'au premier ancetre position:
         //      absolute et forcer ses dimensions a 100vw x 100vh
         //   3. Forcer les conteneurs intermediaires aussi
-        if (shouldLock) {
-          var vids = document.querySelectorAll('video');
-          for (var vi = 0; vi < vids.length; vi++) {
-            if (vids[vi].offsetHeight >= 200) {
-              // On NE force PAS de taille sur la video elle-meme.
-              // Instagram la dimensionne correctement a l'ouverture
-              // (header visible, bonne proportion). C'est apres le
-              // chargement des Suggestions qu'Instagram retrecit les
-              // CONTENEURS, ce qui comprime la video. On empeche ce
-              // retrecissement en forcant min-height/min-width sur
-              // les ancetres, et la video suit naturellement via son
-              // CSS d'origine (height: var(--x-height) = 100% du parent).
-              //
-              // Forcer height:100vh sur la video AGRANDISSAIT la video
-              // au-dela de sa taille naturelle, poussant le header ami
-              // au-dessus du viewport.
-
-              // Remonter TOUS les ancetres et empecher Instagram de
-              // les retrecir en-dessous de la taille viewport.
-              var ancestor = vids[vi].parentElement;
-              var ad = 0;
-              while (ancestor && ancestor !== document.body && ad < 12) {
-                ancestor.style.setProperty('min-height', '100vh', 'important');
-                ancestor.style.setProperty('min-width', '100vw', 'important');
-                ancestor.style.setProperty('max-width', 'none', 'important');
-                ancestor.style.setProperty('max-height', 'none', 'important');
-                // Override les variables CSS d'Instagram.
-                ancestor.style.setProperty('--x-width', '100vw');
-                ancestor.style.setProperty('--x-height', '100vh');
-                ancestor.style.setProperty('--x-maxWidth', '100vw');
-                ancestor = ancestor.parentElement;
-                ad++;
-              }
-              break;
-            }
-          }
-        }
+        // Aucun forcing de taille en 4.1 — test de la taille naturelle
+        // Instagram. Si le Reel reste plein ecran au natural (comme dans
+        // l'animation d'ouverture), on peut laisser Instagram gerer.
+        // Le scroll block (touchmove) et le scrollTop=0 devraient suffire.
 
         // --- Fix scroll position sur DM Reel ----------------------------
         //

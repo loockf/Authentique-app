@@ -64,10 +64,12 @@
  *               autres onglets, et n'a pas fix le header DM).
  *   Alpha 3.8 — revert HiddenBadge + min-height au lieu de height.
  *   Alpha 3.9 — fix scroll bypass + scrollTop=0.
- *   Alpha 4.0 — retire le forcing de taille sur la video elle-meme
- *               (height/width/min-height/min-width). Seuls les
- *               ancetres gardent min-height:100vh pour empecher
- *               Instagram de les retrecir. La video suit sa taille
- *               naturelle (header visible, bonne proportion).
+ *   Alpha 4.0 — retire le forcing de taille sur la video.
+ *   Alpha 4.1 — test : retire AUSSI le forcing sur les ancetres.
+ *               Instagram gere sa propre taille. Seuls le scroll
+ *               block (touchmove) et le scrollTop=0 restent. Si la
+ *               video reste full-screen au natural, on a fini. Si
+ *               la bande noire revient, on cherchera un forcing
+ *               moins aggressif.
  */
-export const APP_VERSION = 'Alpha 4.0';
+export const APP_VERSION = 'Alpha 4.1';
