@@ -1317,29 +1317,42 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         fullScan();
 
         // ------------------------------------------------------------------
-        // STRATEGIE DE SCAN — POLLING + SKIP PENDANT SCROLL ACTIF
+        // STRATEGIE DE SCAN — POLLING + SKIP PENDANT INTERACTION TACTILE
         // ------------------------------------------------------------------
-        // Historique : setInterval(fullScan, 500) tournait en permanence.
-        // Ca scannait 2 fois par seconde meme en plein scroll utilisateur,
-        // ce qui causait un jank perceptible (querySelectorAll sur tous les
-        // articles/headings/videos a chaque tick).
+        // Evolution : on detectait le scroll via l'evenement 'scroll' sur
+        // document avec capture:true. Probleme : les evenements scroll
+        // ne bubblent pas et ne sont pas toujours captures au niveau
+        // document pour les scroll containers internes d'Instagram.
         //
-        // Version actuelle : on detecte le scroll actif (evenement 'scroll'
-        // sur window ou sur tout element). Tant que scrollActiveUntil est
-        // dans le futur, fullScan skip completement. Apres 150ms sans
-        // nouvel evenement scroll, on reprend le polling normal.
+        // Version actuelle : detection via les evenements TACTILES
+        // (touchstart, touchmove, touchend). Des que l'utilisateur touche
+        // l'ecran avec une intention de scroll, on bloque les scanners.
+        // Apres touchend, on laisse 400ms d'inertie pour que le scroll
+        // momentum se termine avant de reprendre les scans.
         //
         // Trade-off : un nouveau post charge par Instagram pendant que tu
-        // scrolles n'est filtre qu'apres l'arret du scroll (+ 150ms + 500ms).
+        // scrolles n'est filtre qu'apres l'arret du scroll + 400ms.
         // Mais le scroll lui-meme est aussi fluide que sur Instagram web.
         // ------------------------------------------------------------------
         var scrollActiveUntil = 0;
-        var SCROLL_QUIET_MS = 150;
-        // Un handler scroll passif, pose en capture pour attraper tous
-        // les scroll containers, y compris ceux qu'Instagram utilise
-        // (certains posts ou sections ont leur propre scroll interne).
+        function markScrolling(quietMs) {
+          scrollActiveUntil = Date.now() + quietMs;
+        }
+        // Pendant le touch (drag actif), on rafraichit l'horizon court.
+        document.addEventListener('touchstart', function() {
+          markScrolling(200);
+        }, { passive: true, capture: true });
+        document.addEventListener('touchmove', function() {
+          markScrolling(200);
+        }, { passive: true, capture: true });
+        // Apres touchend, on laisse 400ms pour que l'inertie se termine.
+        document.addEventListener('touchend', function() {
+          markScrolling(400);
+        }, { passive: true, capture: true });
+        // Fallback scroll listener au cas ou Instagram fait un scroll
+        // programmatique (sans touch).
         document.addEventListener('scroll', function() {
-          scrollActiveUntil = Date.now() + SCROLL_QUIET_MS;
+          markScrolling(200);
         }, { passive: true, capture: true });
 
         setInterval(function() {
@@ -1351,6 +1364,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // en différé (install app) et le marqueur de route sur navigations
         // SPA. Frequence plus basse car ces operations sont plus legeres.
         setInterval(function() {
+          if (Date.now() < scrollActiveUntil) { return; }
           closeOpenInAppBanners();
           updateRouteMarker();
         }, 1500);
@@ -1387,23 +1401,25 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           try { fullScan(); } catch (e) {}
         };
 
-        // --- Detection de route par requestAnimationFrame -------------
+        // --- Detection de route par polling rapide --------------------
         //
         // Filet de securite en plus du monkey-patch pushState : on
-        // verifie le pathname a chaque frame (~16ms = 60fps). Si le
-        // path a change (par un mecanisme qu'on n'aurait pas intercepte),
-        // on lance updateRouteMarker immediatement. Le cout est negligeable
-        // (une comparaison de string par frame).
+        // verifie le pathname regulierement (toutes les 100ms). Si le
+        // path a change, on lance updateRouteMarker immediatement.
+        //
+        // Historique : on utilisait requestAnimationFrame (60fps) mais
+        // ca ajoutait de l'overhead perceptible pendant le scroll. Le
+        // setInterval(100ms) est 6x moins frequent, ce qui reste largement
+        // suffisant pour detecter une navigation SPA (la plupart des UI
+        // prennent 200-500ms pour completer leur transition).
         var rAFLastPath = location.pathname || '';
-        function rAFRouteCheck() {
+        setInterval(function() {
           var p = location.pathname || '';
           if (p !== rAFLastPath) {
             rAFLastPath = p;
             try { updateRouteMarker(); } catch (e) {}
           }
-          requestAnimationFrame(rAFRouteCheck);
-        }
-        requestAnimationFrame(rAFRouteCheck);
+        }, 100);
 
         post({ type: 'ready', platform: 'instagram' });
       }

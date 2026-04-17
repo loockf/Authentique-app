@@ -72,9 +72,16 @@
  *   Alpha 4.4 — broader color forcing (sans effet).
  *   Alpha 4.5 — FINAL DM Reels.
  *   Alpha 4.6 — 5 ameliorations UX.
- *   Alpha 4.7 — fix flash Reels lors du changement d'onglet :
- *               retarde le retrait de l'overlay noir de 500ms quand
- *               on quitte /reels/, pour que la page de destination
- *               ait le temps de se charger et couvrir le contenu.
+ *   Alpha 4.7 — fix flash Reels lors du changement d'onglet.
+ *   Alpha 4.8 — ameliorations scroll et ergonomie :
+ *               - long-press bouton flottant 150ms -> 100ms
+ *               - revert fond noir (retour colors.background)
+ *               - detection scroll via touch events (plus fiable
+ *                 que 'scroll' qui ne bubble pas)
+ *               - inertie 400ms apres touchend avant reprise scans
+ *               - rAF route check -> setInterval 100ms (moins
+ *                 d'overhead par frame pendant le scroll)
+ *               - skip du 1500ms interval (banners/route) pendant
+ *                 scroll actif aussi
  */
-export const APP_VERSION = 'Alpha 4.7';
+export const APP_VERSION = 'Alpha 4.8';
