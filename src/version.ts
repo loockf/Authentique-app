@@ -60,10 +60,12 @@
  *               fonctionne, mais header coupe en haut).
  *   Alpha 3.6 — retrait viewport-fit:cover (sans effet sur le
  *               header coupe).
- *   Alpha 3.7 — HiddenBadge passe en position:absolute bottom:0.
- *               La bande n'occupe plus d'espace en flex donc le
- *               WebView recupere sa hauteur complete. Instagram a
- *               plus de place pour rendre son header DM sans le
- *               couper.
+ *   Alpha 3.7 — HiddenBadge en absolute (a casse la nav dans les
+ *               autres onglets, et n'a pas fix le header DM).
+ *   Alpha 3.8 — revert HiddenBadge en flex. Dans le walk-up du DM
+ *               Reel, utilise min-height/min-width au lieu de
+ *               height/width pour laisser les conteneurs grandir
+ *               au-dela de 100vh si Instagram le necessite pour
+ *               le header au-dessus du Reel.
  */
-export const APP_VERSION = 'Alpha 3.7';
+export const APP_VERSION = 'Alpha 3.8';

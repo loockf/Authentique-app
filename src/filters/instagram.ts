@@ -660,19 +660,17 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
               vids[vi].style.setProperty('--x-height', '100vh');
               vids[vi].style.setProperty('--x-maxWidth', '100vw');
 
-              // Remonter TOUS les ancetres jusqu'a body (pas de break
-              // sur le premier absolute). Diagnostic Inspector a montre
-              // que les contraintes sont reparties sur plusieurs niveaux :
-              // parent 5 (absolute) ET parents 6, 7, 8 (static) ont tous
-              // des hauteurs/largeurs qui clippent. On force chacun.
+              // Remonter TOUS les ancetres. On utilise min-height/
+              // min-width (pas height/width) pour que les conteneurs
+              // puissent rester plus grands que 100vh si Instagram
+              // en a besoin (par exemple pour que le header au-dessus
+              // du Reel ait sa place). max-height: none supprime les
+              // contraintes d'Instagram.
               var ancestor = vids[vi].parentElement;
               var ad = 0;
               while (ancestor && ancestor !== document.body && ad < 12) {
-                // Force les dimensions sur tous les ancetres traverses.
                 ancestor.style.setProperty('min-height', '100vh', 'important');
                 ancestor.style.setProperty('min-width', '100vw', 'important');
-                ancestor.style.setProperty('width', '100vw', 'important');
-                ancestor.style.setProperty('height', '100vh', 'important');
                 ancestor.style.setProperty('max-width', 'none', 'important');
                 ancestor.style.setProperty('max-height', 'none', 'important');
                 // Override les variables CSS d'Instagram.
