@@ -663,32 +663,61 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
         // --- Force le Reel DM a rester full-viewport ---------------------
         //
-        // Deux cas observes en test :
-        //   Cas 1 : bande noire a DROITE (conteneur a un max-width
-        //           plus petit que le viewport)
-        //   Cas 2 : bande noire en BAS (conteneur a une hauteur fixe
-        //           plus petite que le viewport)
+        // Diagnostic via Safari Web Inspector :
         //
-        // On force width + height + remove les contraintes max-width
-        // sur la video ET ses 4 premiers ancetres a chaque tick.
+        //   Parent 5 (position:absolute) a h=665 au lieu de ~740
+        //   (viewport). La video et ses parents 0-4 font h=735, mais
+        //   parent 5 les clippe → bande noire en bas.
+        //
+        //   Variable CSS --x-width: calc(90vh * 9/16) donne ~374px
+        //   au lieu de 393px (viewport width) → bande noire a droite.
+        //
+        // Fix cible :
+        //   1. Override --x-width a 100vw sur la video
+        //   2. Remonter du video jusqu'au premier ancetre position:
+        //      absolute et forcer ses dimensions a 100vw x 100vh
+        //   3. Forcer les conteneurs intermediaires aussi
         if (shouldLock) {
           var vids = document.querySelectorAll('video');
           for (var vi = 0; vi < vids.length; vi++) {
             if (vids[vi].offsetHeight >= 200) {
+              // Video elle-meme : full-viewport + override la variable
+              // CSS que Instagram utilise pour calculer la largeur.
               vids[vi].style.setProperty('min-height', '100vh', 'important');
               vids[vi].style.setProperty('height', '100vh', 'important');
               vids[vi].style.setProperty('min-width', '100vw', 'important');
               vids[vi].style.setProperty('width', '100vw', 'important');
               vids[vi].style.setProperty('object-fit', 'cover', 'important');
-              // Force les 4 premiers ancetres a prendre tout le viewport
-              // en hauteur ET en largeur, et retire les max-width.
+              vids[vi].style.setProperty('--x-width', '100vw');
+              vids[vi].style.setProperty('--x-height', '100vh');
+              vids[vi].style.setProperty('--x-maxWidth', '100vw');
+
+              // Remonter jusqu'au premier ancetre position:absolute
+              // (parent 5 dans le diagnostic) et forcer ses dimensions.
+              // En chemin, forcer aussi les intermediaires.
               var ancestor = vids[vi].parentElement;
+              var foundAbsolute = false;
               var ad = 0;
-              while (ancestor && ancestor !== document.body && ad < 4) {
+              while (ancestor && ancestor !== document.body && ad < 8) {
+                var pos = '';
+                try { pos = window.getComputedStyle(ancestor).position; } catch(e) {}
+
+                // Force les dimensions sur tous les ancetres traverses.
                 ancestor.style.setProperty('min-height', '100vh', 'important');
                 ancestor.style.setProperty('min-width', '100vw', 'important');
                 ancestor.style.setProperty('max-width', 'none', 'important');
-                ancestor.style.setProperty('overflow', 'hidden', 'important');
+                // Override les variables CSS d'Instagram sur chaque ancetre.
+                ancestor.style.setProperty('--x-width', '100vw');
+                ancestor.style.setProperty('--x-height', '100vh');
+                ancestor.style.setProperty('--x-maxWidth', '100vw');
+
+                if (pos === 'absolute' || pos === 'fixed') {
+                  // C'est LE conteneur qui clippe : forcer sa hauteur.
+                  ancestor.style.setProperty('height', '100vh', 'important');
+                  ancestor.style.setProperty('width', '100vw', 'important');
+                  foundAbsolute = true;
+                  break;
+                }
                 ancestor = ancestor.parentElement;
                 ad++;
               }
