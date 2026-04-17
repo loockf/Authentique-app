@@ -47,11 +47,10 @@
  *               (les Reels suivants rendus en dessous par Instagram).
  *   Alpha 2.6 — position:relative (echec, meme resultat que 2.4).
  *   Alpha 2.7 — gap cover dynamique (echoue : barre reponse cachee).
- *   Alpha 2.8 — approche "comme Instagram natif" : la video du Reel
- *               est forcee a min-height: 100vh + object-fit: cover.
- *               Elle remplit le viewport entier, plus de gap en bas.
- *               Les elements UI (pseudo, boutons, barre de reponse)
- *               sont superposes par Instagram naturellement. Retrait
- *               du gap cover et des hacks overflow-y / position.
+ *   Alpha 2.8 — video full-viewport (echec, aucun effet visible).
+ *   Alpha 2.9 — hack viewport : meta viewport-fit=cover injecte au
+ *               demarrage + min-height:100vh sur html/body en
+ *               reel-locked, pour faire croire a Instagram que le
+ *               viewport est plus grand. Tentative experimentale.
  */
-export const APP_VERSION = 'Alpha 2.8';
+export const APP_VERSION = 'Alpha 2.9';

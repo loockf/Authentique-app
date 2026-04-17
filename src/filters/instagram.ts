@@ -278,6 +278,15 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       object-fit: cover !important;
     }
 
+    /* Hack viewport : faire croire a Instagram que le contenu est
+       plus haut qu'il ne l'est. Combine avec viewport-fit=cover pose
+       sur le meta viewport, ca pousse Instagram a calculer ses
+       hauteurs sur une base plus generewe, eliminant le gap. */
+    html.authentique-reel-locked-html,
+    body.authentique-reel-locked {
+      min-height: 100vh !important;
+    }
+
     /* Nuclear : on force overflow: visible + max-width + clip: auto
        sur TOUS les descendants du lock. Instagram place les boutons
        d'action du reel (heart, comment, share, save) dans un conteneur
@@ -393,6 +402,38 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         return;
       }
       window.__authentiqueInstalled = true;
+
+      // --- Hack viewport pour les Reels ---------------------------------
+      //
+      // Tentative : faire croire a Instagram que le viewport est plus
+      // grand qu'il ne l'est en realite, pour qu'il dimensionne ses
+      // Reels en consequence et remplisse tout l'ecran. Sans ca,
+      // Instagram laisse une "bande" en bas (debut du Reel suivant
+      // visible).
+      //
+      // Deux interventions :
+      //   1. Forcer viewport-fit=cover sur le meta viewport — etend
+      //      le rendu dans les zones safe-area (notch + home indicator).
+      //   2. Ajouter du CSS : html, body { min-height: calc(100vh + 100px) }
+      //      pour pousser le contenu plus loin que le viewport reel.
+      //
+      // C'est experimental. Si ca ne marche pas, on revert proprement.
+      try {
+        var existingViewport = document.querySelector('meta[name="viewport"]');
+        if (existingViewport && !existingViewport.hasAttribute('data-authentique-modified')) {
+          var content = existingViewport.getAttribute('content') || '';
+          if (content.indexOf('viewport-fit') === -1) {
+            existingViewport.setAttribute('content', content + ', viewport-fit=cover');
+          }
+          existingViewport.setAttribute('data-authentique-modified', '1');
+        } else if (!existingViewport) {
+          var newViewport = document.createElement('meta');
+          newViewport.setAttribute('name', 'viewport');
+          newViewport.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
+          newViewport.setAttribute('data-authentique-modified', '1');
+          (document.head || document.documentElement).appendChild(newViewport);
+        }
+      } catch (e) {}
 
       var prefs = ${serializedPrefs};
       var hiddenCount = 0;
@@ -682,6 +723,9 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // l'utilisateur de glisser dans le fil algorithmique Reels.
         var shouldLock = isIndividualReelRoute() || isDMReelOverlayOpen();
         document.body.classList.toggle('authentique-reel-locked', shouldLock);
+        if (document.documentElement) {
+          document.documentElement.classList.toggle('authentique-reel-locked-html', shouldLock);
+        }
         // Attache/detache dynamiquement le touchmove handler qui
         // bloque les swipes verticaux — presence a meme d'eviter
         // l'overhead d'un listener touchmove sur chaque scroll normal.
