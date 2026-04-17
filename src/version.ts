@@ -65,11 +65,11 @@
  *   Alpha 3.8 — revert HiddenBadge + min-height au lieu de height.
  *   Alpha 3.9 — fix scroll bypass + scrollTop=0.
  *   Alpha 4.0 — retire le forcing de taille sur la video.
- *   Alpha 4.1 — test : retire AUSSI le forcing sur les ancetres.
- *               Instagram gere sa propre taille. Seuls le scroll
- *               block (touchmove) et le scrollTop=0 restent. Si la
- *               video reste full-screen au natural, on a fini. Si
- *               la bande noire revient, on cherchera un forcing
- *               moins aggressif.
+ *   Alpha 4.1 — retire tout forcing (header OK mais bande droite
+ *               cache les boutons d'action).
+ *   Alpha 4.2 — forcing UNIQUEMENT sur la largeur des ancetres
+ *               (min-width:100vw + max-width:none + --x-width:100vw).
+ *               Pas de forcing sur la hauteur pour garder le header
+ *               visible.
  */
-export const APP_VERSION = 'Alpha 4.1';
+export const APP_VERSION = 'Alpha 4.2';

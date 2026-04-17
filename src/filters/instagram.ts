@@ -648,10 +648,32 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         //   2. Remonter du video jusqu'au premier ancetre position:
         //      absolute et forcer ses dimensions a 100vw x 100vh
         //   3. Forcer les conteneurs intermediaires aussi
-        // Aucun forcing de taille en 4.1 — test de la taille naturelle
-        // Instagram. Si le Reel reste plein ecran au natural (comme dans
-        // l'animation d'ouverture), on peut laisser Instagram gerer.
-        // Le scroll block (touchmove) et le scrollTop=0 devraient suffire.
+        // Forcing UNIQUEMENT sur la largeur des ancetres. Sans ca,
+        // Instagram utilise --x-width: calc(90vh * 9/16) qui donne un
+        // conteneur plus etroit que le viewport (ex: 374 vs 393px),
+        // ce qui colle les boutons d'action au bord du conteneur et
+        // les rend partiellement caches derriere la bande noire.
+        //
+        // On ne touche PAS a la hauteur (sinon on re-casse l'affichage
+        // du header ami au-dessus du Reel, fix trouve en Alpha 4.1).
+        if (shouldLock) {
+          var vids = document.querySelectorAll('video');
+          for (var vi = 0; vi < vids.length; vi++) {
+            if (vids[vi].offsetHeight >= 200) {
+              var ancestor = vids[vi].parentElement;
+              var ad = 0;
+              while (ancestor && ancestor !== document.body && ad < 12) {
+                ancestor.style.setProperty('min-width', '100vw', 'important');
+                ancestor.style.setProperty('max-width', 'none', 'important');
+                ancestor.style.setProperty('--x-width', '100vw');
+                ancestor.style.setProperty('--x-maxWidth', '100vw');
+                ancestor = ancestor.parentElement;
+                ad++;
+              }
+              break;
+            }
+          }
+        }
 
         // --- Fix scroll position sur DM Reel ----------------------------
         //
