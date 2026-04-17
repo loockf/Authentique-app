@@ -237,30 +237,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
        barre de reponse qui disparait).
        ----------------------------------------------------------------- */
 
-    /* Force la visibilite de la barre de reponse dans les DM Reels.
-       Dans certaines conversations, Instagram applique color:
-       rgb(12,16,20) (noir) au parent de la textarea sur fond gris
-       fonce, rendant tout le contenu invisible (effet "bande noire").
-       On cible plusieurs niveaux : placeholder natif (toutes variantes
-       webkit/standard) + couleur heritee sur tous les descendants du
-       conteneur parent de la textarea. */
-    body.authentique-reel-locked textarea::placeholder,
-    body.authentique-reel-locked textarea::-webkit-input-placeholder,
-    body.authentique-reel-locked input::placeholder,
-    body.authentique-reel-locked input::-webkit-input-placeholder {
-      color: rgba(245, 245, 245, 0.8) !important;
-      -webkit-text-fill-color: rgba(245, 245, 245, 0.8) !important;
-      opacity: 1 !important;
-    }
-    /* Force la couleur sur le conteneur de la textarea et tous ses
-       enfants (hors media) pour que le texte herite d'une couleur
-       lisible. Cible specifiquement les div qui ont une textarea en
-       enfant direct. */
-    body.authentique-reel-locked div:has(> textarea),
-    body.authentique-reel-locked div:has(> textarea) *:not(video):not(img):not(svg):not(canvas) {
-      color: rgba(245, 245, 245, 0.9) !important;
-      -webkit-text-fill-color: rgba(245, 245, 245, 0.9) !important;
-    }
+    /* Note : l'effet "bande noire" sur la barre de reponse dans
+       certaines conversations DM Reels n'est pas un bug Authentique.
+       Instagram mobile web lui-meme rend la barre invisible dans ces
+       cas (confirme en chargeant instagram.com directement dans
+       Arc/Safari — meme bug). On ne peut pas fixer ce qu'on ne cause
+       pas. Les tentatives de color forcing (Alpha 4.3 et 4.4) n'ont
+       eu aucun effet. */
 
     /* -----------------------------------------------------------------
        Etat vide de la page Explore (loupe) en mode idle

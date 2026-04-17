@@ -68,10 +68,16 @@
  *   Alpha 4.1 — retire tout forcing (header OK mais bande droite
  *               cache les boutons d'action).
  *   Alpha 4.2 — forcing UNIQUEMENT sur la largeur des ancetres.
- *   Alpha 4.3 — placeholder fix (insuffisant, bande noire persiste).
- *   Alpha 4.4 — force plus largement la couleur de texte dans tout
- *               le conteneur de la textarea (div:has(> textarea) + *),
- *               pas juste le placeholder. Cible aussi
- *               ::-webkit-input-placeholder pour Safari iOS.
+ *   Alpha 4.3 — placeholder fix (sans effet).
+ *   Alpha 4.4 — broader color forcing (sans effet).
+ *   Alpha 4.5 — FINAL DM Reels. L'effet "bande noire" sur la barre
+ *               de reponse dans certaines conversations n'est pas
+ *               reproductible en forcant les couleurs CSS parce que
+ *               c'est un bug d'Instagram mobile web lui-meme
+ *               (confirme en ouvrant instagram.com directement dans
+ *               Arc/Safari). On revert le color forcing inutile.
+ *               Etat final : video full-screen, header visible,
+ *               boutons visibles, scroll bloque, scroll bypass
+ *               bloque, scrollTop=0, width forcee sur ancetres.
  */
-export const APP_VERSION = 'Alpha 4.4';
+export const APP_VERSION = 'Alpha 4.5';
