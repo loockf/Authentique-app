@@ -62,10 +62,10 @@
  *               header coupe).
  *   Alpha 3.7 — HiddenBadge en absolute (a casse la nav dans les
  *               autres onglets, et n'a pas fix le header DM).
- *   Alpha 3.8 — revert HiddenBadge en flex. Dans le walk-up du DM
- *               Reel, utilise min-height/min-width au lieu de
- *               height/width pour laisser les conteneurs grandir
- *               au-dela de 100vh si Instagram le necessite pour
- *               le header au-dessus du Reel.
+ *   Alpha 3.8 — revert HiddenBadge + min-height au lieu de height.
+ *   Alpha 3.9 — fix scroll bypass (bloque TOUS les touchmove en DM
+ *               Reel, pas juste les verticaux) + fix header coupe
+ *               (force scrollTop=0 lors de l'ouverture d'un DM Reel
+ *               pour ramener le header visible en haut).
  */
-export const APP_VERSION = 'Alpha 3.8';
+export const APP_VERSION = 'Alpha 3.9';

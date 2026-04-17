@@ -342,6 +342,9 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // importe la valeur initiale. Ensuite on ne ré-emet que sur
       // changement d'etat.
       var lastReportedOnExplore = null;
+      // Flag pour ne reset le scrollTop qu'une seule fois par ouverture
+      // de DM Reel (pas a chaque tick de poll).
+      var reelScrollReset = false;
       // Compteur de ticks consecutifs ou le Reel courant ressemble
       // a celui d'un ami (video visible + pas de "Suivre"). On exige
       // 3 ticks avant de retirer l'overlay pour eviter les faux
@@ -683,6 +686,42 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
               break;
             }
           }
+        }
+
+        // --- Fix scroll position sur DM Reel ----------------------------
+        //
+        // Instagram ouvre les DM Reels avec un scrollTop > 0, ce qui
+        // pousse le header (photo + nom de l'ami) au-dessus de la zone
+        // visible. On force scrollTop = 0 sur le document et tous les
+        // scrollable parents pour ramener le contenu au tout début.
+        // On ne le fait qu'UNE FOIS par activation (flag reelScrollReset).
+        if (shouldLock && !reelScrollReset) {
+          reelScrollReset = true;
+          try {
+            window.scrollTo(0, 0);
+            if (document.scrollingElement) {
+              document.scrollingElement.scrollTop = 0;
+            }
+            // Cherche aussi le premier parent scrollable et reset
+            var vids2 = document.querySelectorAll('video');
+            for (var vs = 0; vs < vids2.length; vs++) {
+              if (vids2[vs].offsetHeight >= 200) {
+                var scrollParent = vids2[vs].parentElement;
+                var sp = 0;
+                while (scrollParent && scrollParent !== document.body && sp < 12) {
+                  if (scrollParent.scrollTop > 0) {
+                    scrollParent.scrollTop = 0;
+                  }
+                  scrollParent = scrollParent.parentElement;
+                  sp++;
+                }
+                break;
+              }
+            }
+          } catch (e) {}
+        }
+        if (!shouldLock) {
+          reelScrollReset = false;
         }
 
         // Etat vide de la loupe Instagram : pose uniquement quand on
@@ -1189,9 +1228,14 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         if (!e.touches || e.touches.length !== 1) { return; }
         var dx = e.touches[0].clientX - _touchStartX;
         var dy = e.touches[0].clientY - _touchStartY;
-        // On bloque le mouvement s'il est majoritairement vertical
-        // et depasse un seuil qui elimine les micro-mouvements.
-        if (Math.abs(dy) > 6 && Math.abs(dy) > Math.abs(dx)) {
+        // On bloque TOUT mouvement qui depasse un seuil minimal (6px).
+        // L'ancienne version ne bloquait que les gestes principalement
+        // verticaux (dy > dx), mais un swipe horizontal suivi d'un
+        // changement de direction vertical contournait la protection
+        // et permettait de scroller vers les Reels algorithmiques.
+        // En DM Reel, il n'y a aucune raison de laisser passer un
+        // swipe horizontal non plus (pas de stories, pas de carousel).
+        if (Math.abs(dy) > 6 || Math.abs(dx) > 6) {
           try { e.preventDefault(); } catch (err) {}
         }
       }
