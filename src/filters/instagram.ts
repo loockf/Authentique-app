@@ -600,6 +600,11 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         var p = location.pathname || '';
         return p.indexOf('/explore') === 0;
       }
+      function isStoryRoute() {
+        // /stories/<username>/<id>/ = visionneuse de stories
+        var p = location.pathname || '';
+        return p.indexOf('/stories/') === 0;
+      }
       function isExploreSearchActive() {
         // Une recherche est active UNIQUEMENT quand l'URL le dit :
         //   - pathname contient /search, OU
@@ -1123,6 +1128,73 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       // dependance fragile sur des labels Instagram qui changent
       // regulierement ("Abonnements" -> "Suivi(e)" en 2024).
 
+      // --- Skip auto des stories sponsorisees ------------------------------
+      //
+      // Quand on visionne les stories d'amis, Instagram intercale des
+      // stories sponsorisees (ex. trip.com_global). On les detecte par
+      // la presence d'un span VISIBLE (offsetHeight > 0) contenant le
+      // texte exact "Sponsorisé" / "Sponsored" / etc. Si trouve, on
+      // simule un tap sur la zone droite du viewport pour avancer a
+      // la story suivante (Instagram a un tap-zone d'avancement a droite).
+      //
+      // Garde-fous :
+      //  - Cooldown 500ms entre deux skips pour laisser Instagram charger
+      //    la story suivante (sinon on risque de cliquer trop vite avant
+      //    que le DOM se mette a jour).
+      //  - Max 10 skips consecutifs pour eviter toute boucle infinie si
+      //    Instagram enchaine 10 sponso d'affilee ou si le tap ne marche
+      //    pas. Le compteur se reset des qu'on detecte une story non-sponso.
+      var SPONSORED_STORY_NEEDLES = [
+        'Sponsorisé', 'Sponsorisée', 'Sponsored',
+        'Partenariat rémunéré', 'Paid partnership',
+      ];
+      var lastStorySkipAt = 0;
+      var consecutiveStorySkips = 0;
+
+      function skipSponsoredStory() {
+        if (!isStoryRoute()) {
+          consecutiveStorySkips = 0;
+          return;
+        }
+        var now = Date.now();
+        if (now - lastStorySkipAt < 500) { return; }
+        if (consecutiveStorySkips >= 10) { return; }
+
+        // Chercher un span visible avec texte "Sponsorisé" exact.
+        var spans = document.querySelectorAll('span');
+        var sponsored = false;
+        for (var i = 0; i < spans.length; i++) {
+          var el = spans[i];
+          if (el.offsetHeight === 0 || el.offsetWidth === 0) { continue; }
+          if (el.children && el.children.length > 0) { continue; }
+          var t = (el.textContent || '').trim();
+          for (var j = 0; j < SPONSORED_STORY_NEEDLES.length; j++) {
+            if (t === SPONSORED_STORY_NEEDLES[j]) {
+              sponsored = true;
+              break;
+            }
+          }
+          if (sponsored) { break; }
+        }
+
+        if (!sponsored) {
+          consecutiveStorySkips = 0;
+          return;
+        }
+
+        // Simuler un tap sur la zone droite du viewport pour avancer.
+        try {
+          var x = window.innerWidth * 0.85;
+          var y = window.innerHeight / 2;
+          var target = document.elementFromPoint(x, y);
+          if (target && typeof target.click === 'function') {
+            target.click();
+            lastStorySkipAt = now;
+            consecutiveStorySkips++;
+          }
+        } catch (e) {}
+      }
+
       function fullScan() {
         if (!document.body) { return; }
         updateRouteMarker();
@@ -1131,6 +1203,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         scanReels();
         scanReelsFullscreen();
         scanExplore();
+        skipSponsoredStory();
         scanDirectSuggestions();
         // scanReelOverlaySuggestions retire — approche table rase.
         closeOpenInAppBanners();

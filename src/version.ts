@@ -74,10 +74,14 @@
  *   Alpha 4.6 — 5 ameliorations UX.
  *   Alpha 4.7 — fix flash Reels lors du changement d'onglet.
  *   Alpha 4.8 — ameliorations scroll (abandonnees).
- *   Alpha 4.9 — revert de tout le code de fluidite scroll (touch
- *               listeners, scrollActiveUntil, skip pendant inertie).
- *               Philosophie Authentique : on ne gere que ce qu'on
- *               veut pas voir, le scroll reste sous le controle
- *               d'Instagram. Long-press 100ms conserve.
+ *   Alpha 4.9 — revert scroll fluidity code.
+ *   Alpha 5.0 — STORIES SPONSORISEES. Detection + auto-skip.
+ *               Diagnostic Safari Inspector : la sponso est marquee
+ *               par un span visible (63x15, top=37) contenant
+ *               texte exact "Sponsorisé". On detecte ce span sur
+ *               /stories/* et on simule un click sur la zone droite
+ *               (85% width, 50% height) du viewport pour avancer
+ *               a la story suivante. Garde-fous : cooldown 500ms
+ *               entre skips + max 10 skips consecutifs.
  */
-export const APP_VERSION = 'Alpha 4.9';
+export const APP_VERSION = 'Alpha 5.0';
