@@ -56,9 +56,12 @@
  *   Alpha 3.3 — webviewDebuggingEnabled pour Safari Web Inspector.
  *   Alpha 3.4 — fix cible via Safari Inspector (partiel : parent 5 OK
  *               mais parents 6-8 toujours contraignants).
- *   Alpha 3.5 — extend walk-up : retire le break sur position:absolute,
- *               force width:100vw + height:100vh sur TOUS les ancetres
- *               (jusqu'a 12 niveaux), pour aussi atteindre les parents
- *               6, 7, 8 (statiques) qui sont 665 et 372.
+ *   Alpha 3.5 — extend walk-up a tous les ancetres (video full-screen
+ *               fonctionne, mais header coupe en haut).
+ *   Alpha 3.6 — retrait du hack viewport-fit:cover qui poussait le
+ *               contenu sous le status bar iOS. Le walk-up JS suffit
+ *               pour forcer les dimensions, viewport-fit n'est plus
+ *               necessaire. Le header (ami qui partage le Reel) ne
+ *               devrait plus etre coupe.
  */
-export const APP_VERSION = 'Alpha 3.5';
+export const APP_VERSION = 'Alpha 3.6';
