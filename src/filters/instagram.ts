@@ -731,6 +731,34 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // l'overhead d'un listener touchmove sur chaque scroll normal.
         syncReelLockTouchHandler(shouldLock);
 
+        // --- Force le Reel DM a rester full-viewport ---------------------
+        //
+        // Le hack viewport-fit=cover fait qu'Instagram dimensionne le
+        // Reel correctement AU DEPART. Mais apres le chargement des
+        // "Suggestions" en dessous, Instagram recalcule son layout et
+        // retrecit le Reel pour faire de la place. On re-force les
+        // dimensions inline a chaque tick pour contrer ce recalcul.
+        if (shouldLock) {
+          var vids = document.querySelectorAll('video');
+          for (var vi = 0; vi < vids.length; vi++) {
+            if (vids[vi].offsetHeight >= 200) {
+              vids[vi].style.setProperty('min-height', '100vh', 'important');
+              vids[vi].style.setProperty('height', '100vh', 'important');
+              vids[vi].style.setProperty('object-fit', 'cover', 'important');
+              // Force aussi les 3 premiers ancetres a min-height:100vh
+              // pour que le conteneur ne contraigne pas la video.
+              var ancestor = vids[vi].parentElement;
+              var ad = 0;
+              while (ancestor && ancestor !== document.body && ad < 3) {
+                ancestor.style.setProperty('min-height', '100vh', 'important');
+                ancestor = ancestor.parentElement;
+                ad++;
+              }
+              break;
+            }
+          }
+        }
+
         // Etat vide de la loupe Instagram : pose uniquement quand on
         // est sur /explore/ sans recherche active. La classe est lue
         // par le CSS pour masquer les spinners et reveler le message.

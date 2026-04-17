@@ -48,9 +48,11 @@
  *   Alpha 2.6 — position:relative (echec, meme resultat que 2.4).
  *   Alpha 2.7 — gap cover dynamique (echoue : barre reponse cachee).
  *   Alpha 2.8 — video full-viewport (echec, aucun effet visible).
- *   Alpha 2.9 — hack viewport : meta viewport-fit=cover injecte au
- *               demarrage + min-height:100vh sur html/body en
- *               reel-locked, pour faire croire a Instagram que le
- *               viewport est plus grand. Tentative experimentale.
+ *   Alpha 2.9 — hack viewport : viewport-fit=cover. La video est
+ *               full-screen au chargement mais retrecit apres.
+ *   Alpha 3.0 — force brute : re-applique min-height:100vh sur la
+ *               video ET ses 3 premiers ancetres a chaque tick de
+ *               poll pour contrer le recalcul de layout d'Instagram
+ *               apres le chargement des "Suggestions".
  */
-export const APP_VERSION = 'Alpha 2.9';
+export const APP_VERSION = 'Alpha 3.0';
