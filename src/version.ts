@@ -54,8 +54,11 @@
  *   Alpha 3.1 — TABLE RASE DM Reels. Scroll block + video sizing.
  *   Alpha 3.2 — fix bande noire droite + bas (echec).
  *   Alpha 3.3 — webviewDebuggingEnabled pour Safari Web Inspector.
- *   Alpha 3.4 — fix cible via diagnostic DOM : override --x-width
- *               et --x-height sur video + ancetres, force les
- *               dimensions du parent position:absolute (h=665→100vh).
+ *   Alpha 3.4 — fix cible via Safari Inspector (partiel : parent 5 OK
+ *               mais parents 6-8 toujours contraignants).
+ *   Alpha 3.5 — extend walk-up : retire le break sur position:absolute,
+ *               force width:100vw + height:100vh sur TOUS les ancetres
+ *               (jusqu'a 12 niveaux), pour aussi atteindre les parents
+ *               6, 7, 8 (statiques) qui sont 665 et 372.
  */
-export const APP_VERSION = 'Alpha 3.4';
+export const APP_VERSION = 'Alpha 3.5';

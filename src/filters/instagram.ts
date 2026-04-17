@@ -692,32 +692,25 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
               vids[vi].style.setProperty('--x-height', '100vh');
               vids[vi].style.setProperty('--x-maxWidth', '100vw');
 
-              // Remonter jusqu'au premier ancetre position:absolute
-              // (parent 5 dans le diagnostic) et forcer ses dimensions.
-              // En chemin, forcer aussi les intermediaires.
+              // Remonter TOUS les ancetres jusqu'a body (pas de break
+              // sur le premier absolute). Diagnostic Inspector a montre
+              // que les contraintes sont reparties sur plusieurs niveaux :
+              // parent 5 (absolute) ET parents 6, 7, 8 (static) ont tous
+              // des hauteurs/largeurs qui clippent. On force chacun.
               var ancestor = vids[vi].parentElement;
-              var foundAbsolute = false;
               var ad = 0;
-              while (ancestor && ancestor !== document.body && ad < 8) {
-                var pos = '';
-                try { pos = window.getComputedStyle(ancestor).position; } catch(e) {}
-
+              while (ancestor && ancestor !== document.body && ad < 12) {
                 // Force les dimensions sur tous les ancetres traverses.
                 ancestor.style.setProperty('min-height', '100vh', 'important');
                 ancestor.style.setProperty('min-width', '100vw', 'important');
+                ancestor.style.setProperty('width', '100vw', 'important');
+                ancestor.style.setProperty('height', '100vh', 'important');
                 ancestor.style.setProperty('max-width', 'none', 'important');
-                // Override les variables CSS d'Instagram sur chaque ancetre.
+                ancestor.style.setProperty('max-height', 'none', 'important');
+                // Override les variables CSS d'Instagram.
                 ancestor.style.setProperty('--x-width', '100vw');
                 ancestor.style.setProperty('--x-height', '100vh');
                 ancestor.style.setProperty('--x-maxWidth', '100vw');
-
-                if (pos === 'absolute' || pos === 'fixed') {
-                  // C'est LE conteneur qui clippe : forcer sa hauteur.
-                  ancestor.style.setProperty('height', '100vh', 'important');
-                  ancestor.style.setProperty('width', '100vw', 'important');
-                  foundAbsolute = true;
-                  break;
-                }
                 ancestor = ancestor.parentElement;
                 ad++;
               }
