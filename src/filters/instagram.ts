@@ -226,6 +226,25 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
     }
 
     /* -----------------------------------------------------------------
+       Masquage visuel des stories sponsorisees pendant le skip
+       -----------------------------------------------------------------
+       Quand on detecte une story sponsorisee sur /stories/*, on ajoute
+       body.authentique-story-hiding qui declenche un overlay noir via
+       ::after. L'utilisateur ne voit jamais la story sponso visuellement,
+       meme pendant les ~500ms que prend le skip programmatique. La
+       classe est retiree des que la story courante n'est plus sponso.
+       pointer-events: none pour que nos clicks programmatiques passent
+       quand meme a travers l'overlay. */
+    body.authentique-story-hiding::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: #000000;
+      z-index: 9999;
+      pointer-events: none;
+    }
+
+    /* -----------------------------------------------------------------
        Lock vertical swipe sur un Reel individuel OU modal DM
        -----------------------------------------------------------------
        Approche minimaliste : ZERO CSS sur body.authentique-reel-locked.
@@ -1150,15 +1169,18 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       ];
       var lastStorySkipAt = 0;
       var consecutiveStorySkips = 0;
+      // URL de la derniere story comptabilisee comme sponsorisee.
+      // Permet d'eviter d'incrementer plusieurs fois le compteur
+      // pour la meme story detectee par plusieurs ticks de poll.
+      var lastCountedSponsoredStory = '';
 
       function skipSponsoredStory() {
         if (!isStoryRoute()) {
           consecutiveStorySkips = 0;
+          document.body.classList.remove('authentique-story-hiding');
+          lastCountedSponsoredStory = '';
           return;
         }
-        var now = Date.now();
-        if (now - lastStorySkipAt < 500) { return; }
-        if (consecutiveStorySkips >= 10) { return; }
 
         // Chercher un span visible avec texte "Sponsorisé" exact.
         var spans = document.querySelectorAll('span');
@@ -1179,8 +1201,32 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
         if (!sponsored) {
           consecutiveStorySkips = 0;
+          document.body.classList.remove('authentique-story-hiding');
+          lastCountedSponsoredStory = '';
           return;
         }
+
+        // Sponso detectee : on applique IMMEDIATEMENT l'overlay noir
+        // pour que l'utilisateur ne voie jamais le contenu, meme pendant
+        // les ~500ms que prend le skip programmatique.
+        document.body.classList.add('authentique-story-hiding');
+
+        // Incrementer le compteur UNE SEULE FOIS par URL de story
+        // sponsorisee. Le poll tick peut detecter la meme sponso
+        // plusieurs fois avant qu'Instagram n'ait avance a la suivante.
+        var currentPath = location.pathname || '';
+        if (currentPath !== lastCountedSponsoredStory) {
+          lastCountedSponsoredStory = currentPath;
+          hiddenCount++;
+          post({ type: 'hidden-count', count: hiddenCount });
+        }
+
+        // Cooldown et max-skips appliques apres l'overlay : on veut
+        // qu'il soit affiche immediatement, meme si on ne peut pas
+        // encore cliquer.
+        var now = Date.now();
+        if (now - lastStorySkipAt < 500) { return; }
+        if (consecutiveStorySkips >= 10) { return; }
 
         // Plusieurs methodes essayees en cascade. Instagram pourrait
         // reagir a l'une ou l'autre selon son implementation interne.

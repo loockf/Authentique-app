@@ -76,9 +76,11 @@
  *   Alpha 4.8 — ameliorations scroll (abandonnees).
  *   Alpha 4.9 — revert scroll fluidity code.
  *   Alpha 5.0 — STORIES SPONSORISEES : detection + skip via click.
- *   Alpha 5.1 — skip sponso plus robuste : cascade de 3 methodes
- *               (click, pointerdown/up, KeyboardEvent ArrowRight)
- *               pour maximiser les chances qu'une des methodes
- *               declenche la navigation Instagram.
+ *   Alpha 5.1 — skip sponso cascade 3 methodes.
+ *   Alpha 5.2 — stories sponso : overlay noir instantane pour ne
+ *               JAMAIS afficher la sponso, meme pendant le skip
+ *               (~500ms) + incrementation du compteur d'elements
+ *               masques (1 increment par URL de story sponso,
+ *               pas par poll tick).
  */
-export const APP_VERSION = 'Alpha 5.1';
+export const APP_VERSION = 'Alpha 5.2';
