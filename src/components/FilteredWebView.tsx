@@ -100,6 +100,16 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
     webviewRef.current?.injectJavaScript(installScript);
   }, [installScript]);
 
+  // Auto-reload quand iOS tue le process WebView pour manque de memoire.
+  // Avec 60+ articles caches qui gardent leurs medias en memoire, plus
+  // notre JS, iOS peut decider de terminer le process. Sans handler,
+  // on reste sur un ecran blanc permanent. Avec reload, on revient sur
+  // Instagram (en perdant la position de scroll — acceptable vs l'ecran
+  // blanc definitif).
+  const handleContentProcessTerminate = useCallback(() => {
+    webviewRef.current?.reload();
+  }, []);
+
   // Propagation "hot reload" des préférences : à chaque fois que `prefs`
   // change (l'utilisateur toggle un switch dans l'écran Paramètres), on
   // appelle l'API `window.__authentiqueUpdatePrefs(newPrefs)` exposée par
@@ -138,6 +148,7 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         injectedJavaScript={installScript}
         onLoadStart={handleLoadStart}
         onMessage={handleMessage}
+        onContentProcessDidTerminate={handleContentProcessTerminate}
         // --- UX ----------------------------------------------------------
         // allowsBackForwardNavigationGestures: false parce que notre script
         // injecte (installTabSwipeNav) prend en charge le swipe horizontal

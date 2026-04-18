@@ -404,6 +404,33 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         if (el.classList.contains('authentique-hidden-flow')) { return false; }
         el.classList.add('authentique-hidden-flow');
         el.setAttribute('data-authentique-reason', reason);
+
+        // Liberation memoire : on detache les medias lourds (videos,
+        // images) des articles caches. Le DOM de l'article reste
+        // (Instagram peut encore le tracker pour son lazy-load) mais
+        // les elements qui consomment le plus de memoire (pixels video,
+        // textures d'image) sont relaches. Critique pour eviter qu'iOS
+        // tue le process WebView quand beaucoup d'articles sont caches
+        // (user a vu un crash a 93 elements masques).
+        try {
+          var vids = el.querySelectorAll('video');
+          for (var v = 0; v < vids.length; v++) {
+            try { vids[v].pause(); } catch (e) {}
+            vids[v].removeAttribute('src');
+            try { vids[v].load(); } catch (e) {}
+          }
+          var imgs = el.querySelectorAll('img');
+          for (var im = 0; im < imgs.length; im++) {
+            imgs[im].removeAttribute('src');
+            imgs[im].removeAttribute('srcset');
+          }
+          var sources = el.querySelectorAll('source');
+          for (var s = 0; s < sources.length; s++) {
+            sources[s].removeAttribute('src');
+            sources[s].removeAttribute('srcset');
+          }
+        } catch (e) {}
+
         if (isHomeFeedRoute()) {
           hiddenCount++;
           post({ type: 'hidden-count', count: hiddenCount });

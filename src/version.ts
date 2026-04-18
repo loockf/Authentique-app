@@ -100,5 +100,15 @@
  *                principal pendant qu'Instagram charge le batch
  *                suivant. Cible le probleme d'affichage "1 post
  *                a la fois" apres Alpha 4.11.
+ *   Alpha 4.13 — fix crash WebView :
+ *                1) auto-reload quand iOS tue le process (via
+ *                   onContentProcessDidTerminate). Evite l'ecran
+ *                   blanc permanent.
+ *                2) liberation memoire : quand hideInFlow cache un
+ *                   article, on detache aussi ses medias (video,
+ *                   img, source) pour liberer la memoire. Le DOM
+ *                   reste, les pixels sont relaches. Critique pour
+ *                   eviter le crash quand beaucoup d'articles sont
+ *                   caches (user a vu un crash a 93 elements masques).
  */
-export const APP_VERSION = 'Alpha 4.12';
+export const APP_VERSION = 'Alpha 4.13';
