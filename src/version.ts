@@ -79,9 +79,11 @@
  *   Alpha 5.1 — skip sponso cascade 3 methodes.
  *   Alpha 5.2 — overlay noir pour stories (ABANDONNE : ::after
  *               avec pointer-events:none bloque tout sur iOS).
- *   Alpha 5.3 — retrait overlay. Story sponso visible ~500ms
- *               puis skip auto (comme 5.1). Ajouts vs 5.1 :
- *               skip-once-per-URL (evite le blocage quand l'user
- *               revient en arriere) + compteur incremente.
+ *   Alpha 5.3 — skip-once + compteur (CASSAIT la story suivante).
+ *   Alpha 5.4 — approche "comme fil d'actualite" : pas de
+ *               navigation, juste CSS hide (visibility:hidden)
+ *               sur video/img/picture quand sponso detectee.
+ *               Instagram garde son timer et avance naturellement.
+ *               Plus aucun click/pointer/keyboard programmatique.
  */
-export const APP_VERSION = 'Alpha 5.3';
+export const APP_VERSION = 'Alpha 5.4';

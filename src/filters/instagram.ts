@@ -225,11 +225,26 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       justify-content: center;
     }
 
-    /* Note : une tentative d'overlay noir via body::after pour
-       masquer les stories sponso pendant le skip a ete abandonnee
-       (Alpha 5.2) car pointer-events: none sur un pseudo-element
-       ne fonctionne pas sur iOS WebView — l'overlay bloquait toute
-       interaction et coinçait l'utilisateur sur un ecran noir. */
+    /* -----------------------------------------------------------------
+       Masquage des stories sponsorisees (approche DOM, pas navigation)
+       -----------------------------------------------------------------
+       Quand on detecte une story sponsorisee sur /stories/*, on ajoute
+       body.authentique-story-hiding qui masque visuellement le contenu
+       (video, image, pictures) via visibility: hidden. On NE touche pas
+       a la navigation Instagram. La story continue de tourner avec son
+       timer naturel, et avance a la suivante apres quelques secondes.
+       L'utilisateur peut aussi taper a droite pour avancer manuellement.
+
+       Approche equivalente au fil d'actualite : on cache, on n'interagit
+       pas. Plus sur qu'un auto-click qui cassait la story suivante
+       (Alpha 5.3). Plus sur qu'un overlay ::after qui bloquait tout
+       sur iOS (Alpha 5.2). */
+    body.authentique-story-hiding video,
+    body.authentique-story-hiding img,
+    body.authentique-story-hiding picture,
+    body.authentique-story-hiding canvas {
+      visibility: hidden !important;
+    }
 
     /* -----------------------------------------------------------------
        Lock vertical swipe sur un Reel individuel OU modal DM
@@ -1154,21 +1169,15 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         'Sponsorisé', 'Sponsorisée', 'Sponsored',
         'Partenariat rémunéré', 'Paid partnership',
       ];
-      var lastStorySkipAt = 0;
-      var consecutiveStorySkips = 0;
+      // URL de la derniere story comptabilisee comme sponsorisee.
+      // Evite d'incrementer le compteur plusieurs fois pour la
+      // meme story (le poll detecte la sponso a chaque tick tant
+      // qu'Instagram affiche la meme URL).
       var lastCountedSponsoredStory = '';
-      // Set des URLs de stories deja auto-skippees. Chaque story
-      // n'est skippee qu'une seule fois pour eviter le blocage
-      // quand l'utilisateur revient en arriere : back -> sponso ->
-      // auto-skip forward -> meme story -> back -> boucle infinie.
-      // Si l'user revient sur une sponso deja skippee, il voit
-      // l'overlay noir mais pas d'auto-skip. Il tape a droite pour
-      // avancer manuellement.
-      var alreadySkippedStories = {};
 
       function skipSponsoredStory() {
         if (!isStoryRoute()) {
-          consecutiveStorySkips = 0;
+          document.body.classList.remove('authentique-story-hiding');
           lastCountedSponsoredStory = '';
           return;
         }
@@ -1191,10 +1200,15 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         }
 
         if (!sponsored) {
-          consecutiveStorySkips = 0;
+          document.body.classList.remove('authentique-story-hiding');
           lastCountedSponsoredStory = '';
           return;
         }
+
+        // Sponso detectee : on masque le contenu via CSS (video/img/picture
+        // deviennent invisibility:hidden). Instagram garde sa navigation,
+        // son timer, et avance naturellement a la story suivante.
+        document.body.classList.add('authentique-story-hiding');
 
         // Incrementer le compteur UNE SEULE FOIS par URL de story
         // sponsorisee.
@@ -1204,62 +1218,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           hiddenCount++;
           post({ type: 'hidden-count', count: hiddenCount });
         }
-
-        // Ne pas auto-skipper une story deja skippee (evite le blocage
-        // quand l'utilisateur revient en arriere). L'overlay reste noir
-        // et l'user peut taper a droite pour avancer manuellement.
-        if (alreadySkippedStories[currentPath]) { return; }
-
-        // Cooldown et max-skips appliques apres l'overlay : on veut
-        // qu'il soit affiche immediatement, meme si on ne peut pas
-        // encore cliquer.
-        var now = Date.now();
-        if (now - lastStorySkipAt < 500) { return; }
-        if (consecutiveStorySkips >= 10) { return; }
-
-        // Plusieurs methodes essayees en cascade. Instagram pourrait
-        // reagir a l'une ou l'autre selon son implementation interne.
-        // On les lance toutes successivement pour maximiser les chances.
-        var x = window.innerWidth * 0.85;
-        var y = window.innerHeight / 2;
-
-        // Methode 1 : click() sur l'element de la tap-zone.
-        try {
-          var target = document.elementFromPoint(x, y);
-          if (target && typeof target.click === 'function') {
-            target.click();
-          }
-        } catch (e) {}
-
-        // Methode 2 : pointerdown + pointerup (plus proche d'un tap
-        // reel avec coordonnees precises).
-        try {
-          var t2 = document.elementFromPoint(x, y);
-          if (t2) {
-            t2.dispatchEvent(new PointerEvent('pointerdown', {
-              bubbles: true, cancelable: true, clientX: x, clientY: y,
-              pointerType: 'touch', isPrimary: true,
-            }));
-            t2.dispatchEvent(new PointerEvent('pointerup', {
-              bubbles: true, cancelable: true, clientX: x, clientY: y,
-              pointerType: 'touch', isPrimary: true,
-            }));
-          }
-        } catch (e) {}
-
-        // Methode 3 : ArrowRight keyboard (Instagram desktop web
-        // supporte cette touche pour avancer les stories, peut-etre
-        // aussi sur mobile web).
-        try {
-          document.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'ArrowRight', code: 'ArrowRight',
-            bubbles: true, cancelable: true,
-          }));
-        } catch (e) {}
-
-        lastStorySkipAt = now;
-        consecutiveStorySkips++;
-        alreadySkippedStories[currentPath] = true;
       }
 
       function fullScan() {
