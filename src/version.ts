@@ -110,5 +110,13 @@
  *                   reste, les pixels sont relaches. Critique pour
  *                   eviter le crash quand beaucoup d'articles sont
  *                   caches (user a vu un crash a 93 elements masques).
+ *   Alpha 4.14 — fix compteur bloque apres reload. bumpHiddenCount
+ *                prend Math.max(previous, count), donc apres un
+ *                auto-reload (ou un crash WebView), le JS repartait
+ *                de 0 et envoyait 1, 2, 3... toujours inferieur a
+ *                la derniere valeur pre-reload (ex : 199), et RN
+ *                restait fige. Correction : resetHiddenCount() est
+ *                appele avant webview.reload() dans le handler
+ *                onContentProcessDidTerminate.
  */
-export const APP_VERSION = 'Alpha 4.13';
+export const APP_VERSION = 'Alpha 4.14';

@@ -64,7 +64,7 @@ function buildInstallScript(bundle: FilterBundle): string {
 }
 
 export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
-  const { bumpHiddenCount, prefs } = useFilters();
+  const { bumpHiddenCount, resetHiddenCount, prefs } = useFilters();
   const webviewRef = useRef<WebView>(null);
 
   // Etat "on est sur /explore/" alimente par le script injecte via
@@ -106,9 +106,13 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
   // on reste sur un ecran blanc permanent. Avec reload, on revient sur
   // Instagram (en perdant la position de scroll — acceptable vs l'ecran
   // blanc definitif).
+  // On reset aussi le compteur : le JS reparti de 0 apres reload et
+  // bumpHiddenCount prend le max, donc sans reset le compteur resterait
+  // bloque a la derniere valeur pre-crash (ex : 199).
   const handleContentProcessTerminate = useCallback(() => {
+    resetHiddenCount();
     webviewRef.current?.reload();
-  }, []);
+  }, [resetHiddenCount]);
 
   // Propagation "hot reload" des préférences : à chaque fois que `prefs`
   // change (l'utilisateur toggle un switch dans l'écran Paramètres), on
