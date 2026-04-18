@@ -77,10 +77,11 @@
  *   Alpha 4.9 — revert scroll fluidity code.
  *   Alpha 5.0 — STORIES SPONSORISEES : detection + skip via click.
  *   Alpha 5.1 — skip sponso cascade 3 methodes.
- *   Alpha 5.2 — stories sponso : overlay noir instantane pour ne
- *               JAMAIS afficher la sponso, meme pendant le skip
- *               (~500ms) + incrementation du compteur d'elements
- *               masques (1 increment par URL de story sponso,
- *               pas par poll tick).
+ *   Alpha 5.2 — overlay noir pour stories (ABANDONNE : ::after
+ *               avec pointer-events:none bloque tout sur iOS).
+ *   Alpha 5.3 — retrait overlay. Story sponso visible ~500ms
+ *               puis skip auto (comme 5.1). Ajouts vs 5.1 :
+ *               skip-once-per-URL (evite le blocage quand l'user
+ *               revient en arriere) + compteur incremente.
  */
-export const APP_VERSION = 'Alpha 5.2';
+export const APP_VERSION = 'Alpha 5.3';

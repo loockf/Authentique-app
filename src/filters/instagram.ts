@@ -225,24 +225,11 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       justify-content: center;
     }
 
-    /* -----------------------------------------------------------------
-       Masquage visuel des stories sponsorisees pendant le skip
-       -----------------------------------------------------------------
-       Quand on detecte une story sponsorisee sur /stories/*, on ajoute
-       body.authentique-story-hiding qui declenche un overlay noir via
-       ::after. L'utilisateur ne voit jamais la story sponso visuellement,
-       meme pendant les ~500ms que prend le skip programmatique. La
-       classe est retiree des que la story courante n'est plus sponso.
-       pointer-events: none pour que nos clicks programmatiques passent
-       quand meme a travers l'overlay. */
-    body.authentique-story-hiding::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: #000000;
-      z-index: 9999;
-      pointer-events: none;
-    }
+    /* Note : une tentative d'overlay noir via body::after pour
+       masquer les stories sponso pendant le skip a ete abandonnee
+       (Alpha 5.2) car pointer-events: none sur un pseudo-element
+       ne fonctionne pas sur iOS WebView — l'overlay bloquait toute
+       interaction et coinçait l'utilisateur sur un ecran noir. */
 
     /* -----------------------------------------------------------------
        Lock vertical swipe sur un Reel individuel OU modal DM
@@ -1169,15 +1156,19 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       ];
       var lastStorySkipAt = 0;
       var consecutiveStorySkips = 0;
-      // URL de la derniere story comptabilisee comme sponsorisee.
-      // Permet d'eviter d'incrementer plusieurs fois le compteur
-      // pour la meme story detectee par plusieurs ticks de poll.
       var lastCountedSponsoredStory = '';
+      // Set des URLs de stories deja auto-skippees. Chaque story
+      // n'est skippee qu'une seule fois pour eviter le blocage
+      // quand l'utilisateur revient en arriere : back -> sponso ->
+      // auto-skip forward -> meme story -> back -> boucle infinie.
+      // Si l'user revient sur une sponso deja skippee, il voit
+      // l'overlay noir mais pas d'auto-skip. Il tape a droite pour
+      // avancer manuellement.
+      var alreadySkippedStories = {};
 
       function skipSponsoredStory() {
         if (!isStoryRoute()) {
           consecutiveStorySkips = 0;
-          document.body.classList.remove('authentique-story-hiding');
           lastCountedSponsoredStory = '';
           return;
         }
@@ -1201,25 +1192,23 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
         if (!sponsored) {
           consecutiveStorySkips = 0;
-          document.body.classList.remove('authentique-story-hiding');
           lastCountedSponsoredStory = '';
           return;
         }
 
-        // Sponso detectee : on applique IMMEDIATEMENT l'overlay noir
-        // pour que l'utilisateur ne voie jamais le contenu, meme pendant
-        // les ~500ms que prend le skip programmatique.
-        document.body.classList.add('authentique-story-hiding');
-
         // Incrementer le compteur UNE SEULE FOIS par URL de story
-        // sponsorisee. Le poll tick peut detecter la meme sponso
-        // plusieurs fois avant qu'Instagram n'ait avance a la suivante.
+        // sponsorisee.
         var currentPath = location.pathname || '';
         if (currentPath !== lastCountedSponsoredStory) {
           lastCountedSponsoredStory = currentPath;
           hiddenCount++;
           post({ type: 'hidden-count', count: hiddenCount });
         }
+
+        // Ne pas auto-skipper une story deja skippee (evite le blocage
+        // quand l'utilisateur revient en arriere). L'overlay reste noir
+        // et l'user peut taper a droite pour avancer manuellement.
+        if (alreadySkippedStories[currentPath]) { return; }
 
         // Cooldown et max-skips appliques apres l'overlay : on veut
         // qu'il soit affiche immediatement, meme si on ne peut pas
@@ -1270,6 +1259,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
         lastStorySkipAt = now;
         consecutiveStorySkips++;
+        alreadySkippedStories[currentPath] = true;
       }
 
       function fullScan() {
