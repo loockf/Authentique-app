@@ -431,6 +431,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           }
         } catch (e) {}
 
+        // Nettoyage DOM agressif : on vide le contenu de l'article.
+        // L'element reste dans le layout (height:0 + opacity:0) pour
+        // que l'IntersectionObserver d'Instagram continue a firer,
+        // mais ses ~200 noeuds enfants sont supprimes. A 200+ articles
+        // caches, ca libere ~40 000 noeuds DOM.
+        try { el.innerHTML = ''; } catch (e) {}
+
         if (isHomeFeedRoute()) {
           hiddenCount++;
           post({ type: 'hidden-count', count: hiddenCount });
@@ -454,15 +461,11 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         for (var i = 0; i < articles.length; i++) {
           var art = articles[i];
           if (art.hasAttribute('data-authentique-media-released')) { continue; }
-          // Les articles deja caches par nos filtres sont deja nettoyes
-          // dans hideInFlow, pas besoin de les refaire.
           if (art.classList.contains('authentique-hidden-flow')) { continue; }
           if (art.classList.contains('authentique-hidden')) { continue; }
           try {
             var rect = art.getBoundingClientRect();
-            // bottom < -3000 = le bas de l'article est a 3000px+ au-dessus
-            // du haut du viewport (~4 ecrans). Seuil conservateur.
-            if (rect.bottom >= -3000) { continue; }
+            if (rect.bottom >= -1500) { continue; }
           } catch (e) { continue; }
           art.setAttribute('data-authentique-media-released', '1');
           try {
@@ -483,6 +486,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
               sources[s].removeAttribute('srcset');
             }
           } catch (e) {}
+          try { art.innerHTML = ''; } catch (e) {}
         }
       }
 
