@@ -1347,36 +1347,51 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         setInterval(fullScan, 500);
 
         // MutationObserver cible sur les INSERTIONS d'articles
-        // uniquement : quand Instagram ajoute un nouveau post via
-        // lazy-load, on le scan instantanement au lieu d'attendre le
-        // prochain tick du poll. Elimine le flash de 500ms ou un
-        // post sponso/suggestion etait visible avant d'etre cache.
-        //
-        // Filtre strict : on ne re-scan QUE si au moins un nouveau
-        // <article> ou [role="article"] apparait dans le DOM. Les
-        // autres mutations (animations, typing indicators, etc.)
-        // sont ignorees pour eviter le jank d'un observer generique.
+        // uniquement. Optimisation : au lieu de scanner TOUS les
+        // articles (scanSponsored + scanSuggestions qui iterent sur
+        // tout), on scan SEULEMENT les nouveaux articles ajoutes.
+        // Ca evite de bloquer le thread principal pendant qu'Instagram
+        // essaie de charger le batch suivant.
         try {
           var feedObserver = new MutationObserver(function(mutations) {
-            var hasNewArticle = false;
-            for (var i = 0; i < mutations.length && !hasNewArticle; i++) {
+            var newArticles = [];
+            for (var i = 0; i < mutations.length; i++) {
               var m = mutations[i];
               if (m.type !== 'childList') { continue; }
               for (var j = 0; j < m.addedNodes.length; j++) {
                 var n = m.addedNodes[j];
                 if (n.nodeType !== 1) { continue; }
-                var isArticle =
-                  n.tagName === 'ARTICLE' ||
-                  (n.getAttribute && n.getAttribute('role') === 'article') ||
-                  (n.querySelector && n.querySelector('article, [role="article"]'));
-                if (isArticle) {
-                  hasNewArticle = true;
-                  break;
+                // Node lui-meme est un article
+                if (n.tagName === 'ARTICLE' ||
+                    (n.getAttribute && n.getAttribute('role') === 'article')) {
+                  newArticles.push(n);
+                }
+                // Ou contient des articles en descendants
+                if (n.querySelectorAll) {
+                  var inner = n.querySelectorAll('article, [role="article"]');
+                  for (var k = 0; k < inner.length; k++) {
+                    newArticles.push(inner[k]);
+                  }
                 }
               }
             }
-            if (hasNewArticle) {
-              try { scanSponsored(); scanSuggestions(); } catch (e) {}
+            if (newArticles.length === 0) { return; }
+
+            // Scan UNIQUEMENT les nouveaux articles (pas tous). O(N)
+            // ou N = nombre d'articles nouvellement inseres, souvent 1-5.
+            for (var a = 0; a < newArticles.length; a++) {
+              var art = newArticles[a];
+              if (art.classList.contains('authentique-hidden')) { continue; }
+              if (art.classList.contains('authentique-hidden-flow')) { continue; }
+              if (prefs.hideAds && (
+                    containsText(art, SPONSORED_NEEDLES) ||
+                    containsAttributeText(art, SPONSORED_NEEDLES))) {
+                hideInFlow(art, 'sponsored');
+                continue;
+              }
+              if (prefs.hideSuggestions && containsText(art, SUGGESTED_NEEDLES)) {
+                hideInFlow(art, 'suggestion-inline');
+              }
             }
           });
           feedObserver.observe(document.body, {

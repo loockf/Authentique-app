@@ -94,5 +94,11 @@
  *                flash de sponso/suggestion visible une fraction
  *                de seconde avant d'etre cache. Filtre strict
  *                pour ne reagir qu'aux ajouts d'articles.
+ *   Alpha 4.12 — optimisation MutationObserver : scan UNIQUEMENT
+ *                les nouveaux articles inseres (pas tous les
+ *                articles du feed). Evite de bloquer le thread
+ *                principal pendant qu'Instagram charge le batch
+ *                suivant. Cible le probleme d'affichage "1 post
+ *                a la fois" apres Alpha 4.11.
  */
-export const APP_VERSION = 'Alpha 4.11';
+export const APP_VERSION = 'Alpha 4.12';
