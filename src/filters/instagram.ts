@@ -439,6 +439,54 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
       }
 
       /**
+       * Liberation memoire des articles loin au-dessus du viewport.
+       * Cible TOUS les articles (amis inclus) dont le bas est a plus
+       * de 3000px au-dessus de l'ecran. A cette distance, l'utilisateur
+       * ne les voit plus ; on detache leurs medias pour liberer la RAM.
+       * Si l'utilisateur remonte, Instagram re-lazy-load les images.
+       * Appelee toutes les 5 secondes — pas a chaque scan pour eviter
+       * de mesurer le layout trop souvent (getBoundingClientRect force
+       * un reflow si le layout est dirty).
+       */
+      function releaseOffscreenMedia() {
+        if (!isHomeFeedRoute()) { return; }
+        var articles = document.querySelectorAll('article, [role="article"]');
+        for (var i = 0; i < articles.length; i++) {
+          var art = articles[i];
+          if (art.hasAttribute('data-authentique-media-released')) { continue; }
+          // Les articles deja caches par nos filtres sont deja nettoyes
+          // dans hideInFlow, pas besoin de les refaire.
+          if (art.classList.contains('authentique-hidden-flow')) { continue; }
+          if (art.classList.contains('authentique-hidden')) { continue; }
+          try {
+            var rect = art.getBoundingClientRect();
+            // bottom < -3000 = le bas de l'article est a 3000px+ au-dessus
+            // du haut du viewport (~4 ecrans). Seuil conservateur.
+            if (rect.bottom >= -3000) { continue; }
+          } catch (e) { continue; }
+          art.setAttribute('data-authentique-media-released', '1');
+          try {
+            var vids = art.querySelectorAll('video');
+            for (var v = 0; v < vids.length; v++) {
+              try { vids[v].pause(); } catch (e) {}
+              vids[v].removeAttribute('src');
+              try { vids[v].load(); } catch (e) {}
+            }
+            var imgs = art.querySelectorAll('img');
+            for (var im = 0; im < imgs.length; im++) {
+              imgs[im].removeAttribute('src');
+              imgs[im].removeAttribute('srcset');
+            }
+            var sources = art.querySelectorAll('source');
+            for (var s = 0; s < sources.length; s++) {
+              sources[s].removeAttribute('src');
+              sources[s].removeAttribute('srcset');
+            }
+          } catch (e) {}
+        }
+      }
+
+      /**
        * Remonte du noeud jusqu'au post le plus proche.
        *
        * On ne remonte QUE jusqu'à une balise <article> ou un élément avec
@@ -1372,6 +1420,13 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         // Poll a 500ms : filet de securite qui garantit que rien ne
         // reste non-scanne.
         setInterval(fullScan, 500);
+
+        // Liberation memoire des articles loin au-dessus du viewport
+        // (amis inclus). Toutes les 5 secondes on parcourt les articles,
+        // et ceux a 3000px+ au-dessus de l'ecran se font retirer leurs
+        // medias. Ca maintient la RAM quasi-constante peu importe la
+        // longueur du scroll.
+        setInterval(releaseOffscreenMedia, 5000);
 
         // MutationObserver cible sur les INSERTIONS d'articles
         // uniquement. Optimisation : au lieu de scanner TOUS les

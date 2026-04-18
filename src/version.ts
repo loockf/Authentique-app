@@ -118,5 +118,16 @@
  *                restait fige. Correction : resetHiddenCount() est
  *                appele avant webview.reload() dans le handler
  *                onContentProcessDidTerminate.
+ *   Alpha 4.15 — liberation memoire aggressive : toutes les 5s, les
+ *                articles (amis inclus) a plus de 3000px au-dessus du
+ *                viewport se font retirer leurs medias (video, img,
+ *                source). Avant, seuls les articles caches par nos
+ *                filtres etaient nettoyes. Mais les posts d'amis
+ *                deja scrolles gardaient images+videos en RAM. Avec
+ *                ~50 posts amis charges, ca representait assez de
+ *                memoire pour qu'iOS tue le process. Maintenant la
+ *                RAM reste quasi-constante peu importe la longueur
+ *                du scroll. Si l'utilisateur remonte, Instagram
+ *                re-lazy-load les images.
  */
-export const APP_VERSION = 'Alpha 4.14';
+export const APP_VERSION = 'Alpha 4.15';
