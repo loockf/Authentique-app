@@ -1182,17 +1182,48 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           return;
         }
 
-        // Simuler un tap sur la zone droite du viewport pour avancer.
+        // Plusieurs methodes essayees en cascade. Instagram pourrait
+        // reagir a l'une ou l'autre selon son implementation interne.
+        // On les lance toutes successivement pour maximiser les chances.
+        var x = window.innerWidth * 0.85;
+        var y = window.innerHeight / 2;
+
+        // Methode 1 : click() sur l'element de la tap-zone.
         try {
-          var x = window.innerWidth * 0.85;
-          var y = window.innerHeight / 2;
           var target = document.elementFromPoint(x, y);
           if (target && typeof target.click === 'function') {
             target.click();
-            lastStorySkipAt = now;
-            consecutiveStorySkips++;
           }
         } catch (e) {}
+
+        // Methode 2 : pointerdown + pointerup (plus proche d'un tap
+        // reel avec coordonnees precises).
+        try {
+          var t2 = document.elementFromPoint(x, y);
+          if (t2) {
+            t2.dispatchEvent(new PointerEvent('pointerdown', {
+              bubbles: true, cancelable: true, clientX: x, clientY: y,
+              pointerType: 'touch', isPrimary: true,
+            }));
+            t2.dispatchEvent(new PointerEvent('pointerup', {
+              bubbles: true, cancelable: true, clientX: x, clientY: y,
+              pointerType: 'touch', isPrimary: true,
+            }));
+          }
+        } catch (e) {}
+
+        // Methode 3 : ArrowRight keyboard (Instagram desktop web
+        // supporte cette touche pour avancer les stories, peut-etre
+        // aussi sur mobile web).
+        try {
+          document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowRight', code: 'ArrowRight',
+            bubbles: true, cancelable: true,
+          }));
+        } catch (e) {}
+
+        lastStorySkipAt = now;
+        consecutiveStorySkips++;
       }
 
       function fullScan() {

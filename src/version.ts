@@ -75,13 +75,10 @@
  *   Alpha 4.7 — fix flash Reels lors du changement d'onglet.
  *   Alpha 4.8 — ameliorations scroll (abandonnees).
  *   Alpha 4.9 — revert scroll fluidity code.
- *   Alpha 5.0 — STORIES SPONSORISEES. Detection + auto-skip.
- *               Diagnostic Safari Inspector : la sponso est marquee
- *               par un span visible (63x15, top=37) contenant
- *               texte exact "Sponsorisé". On detecte ce span sur
- *               /stories/* et on simule un click sur la zone droite
- *               (85% width, 50% height) du viewport pour avancer
- *               a la story suivante. Garde-fous : cooldown 500ms
- *               entre skips + max 10 skips consecutifs.
+ *   Alpha 5.0 — STORIES SPONSORISEES : detection + skip via click.
+ *   Alpha 5.1 — skip sponso plus robuste : cascade de 3 methodes
+ *               (click, pointerdown/up, KeyboardEvent ArrowRight)
+ *               pour maximiser les chances qu'une des methodes
+ *               declenche la navigation Instagram.
  */
-export const APP_VERSION = 'Alpha 5.0';
+export const APP_VERSION = 'Alpha 5.1';
