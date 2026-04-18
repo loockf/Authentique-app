@@ -88,5 +88,11 @@
  *                securite si Instagram reverse le changement).
  *                Note : les commits story 5.0-5.4 sont archives
  *                dans la branche claude/story-attempts-backup.
+ *   Alpha 4.11 — ajout MutationObserver cible sur les insertions
+ *                d'articles : scan instantane au lieu d'attendre
+ *                le prochain tick du poll (500ms). Elimine le
+ *                flash de sponso/suggestion visible une fraction
+ *                de seconde avant d'etre cache. Filtre strict
+ *                pour ne reagir qu'aux ajouts d'articles.
  */
-export const APP_VERSION = 'Alpha 4.10';
+export const APP_VERSION = 'Alpha 4.11';

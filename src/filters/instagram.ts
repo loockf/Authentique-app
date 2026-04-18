@@ -1340,17 +1340,50 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
         fullScan();
 
         // ------------------------------------------------------------------
-        // STRATEGIE DE SCAN — POLLING FIXE
+        // STRATEGIE DE SCAN — POLLING + MUTATION OBSERVER CIBLE
         // ------------------------------------------------------------------
-        // setInterval(fullScan, 500) tourne en permanence. 2 scans par
-        // seconde, zero overhead au niveau mutation (pas de
-        // MutationObserver), comportement previsible.
-        //
-        // Philosophie Authentique : on gere uniquement ce qu'on ne
-        // veut pas voir. Le scroll lui-meme reste sous le controle
-        // de la page Instagram.
-        // ------------------------------------------------------------------
+        // Poll a 500ms : filet de securite qui garantit que rien ne
+        // reste non-scanne.
         setInterval(fullScan, 500);
+
+        // MutationObserver cible sur les INSERTIONS d'articles
+        // uniquement : quand Instagram ajoute un nouveau post via
+        // lazy-load, on le scan instantanement au lieu d'attendre le
+        // prochain tick du poll. Elimine le flash de 500ms ou un
+        // post sponso/suggestion etait visible avant d'etre cache.
+        //
+        // Filtre strict : on ne re-scan QUE si au moins un nouveau
+        // <article> ou [role="article"] apparait dans le DOM. Les
+        // autres mutations (animations, typing indicators, etc.)
+        // sont ignorees pour eviter le jank d'un observer generique.
+        try {
+          var feedObserver = new MutationObserver(function(mutations) {
+            var hasNewArticle = false;
+            for (var i = 0; i < mutations.length && !hasNewArticle; i++) {
+              var m = mutations[i];
+              if (m.type !== 'childList') { continue; }
+              for (var j = 0; j < m.addedNodes.length; j++) {
+                var n = m.addedNodes[j];
+                if (n.nodeType !== 1) { continue; }
+                var isArticle =
+                  n.tagName === 'ARTICLE' ||
+                  (n.getAttribute && n.getAttribute('role') === 'article') ||
+                  (n.querySelector && n.querySelector('article, [role="article"]'));
+                if (isArticle) {
+                  hasNewArticle = true;
+                  break;
+                }
+              }
+            }
+            if (hasNewArticle) {
+              try { scanSponsored(); scanSuggestions(); } catch (e) {}
+            }
+          });
+          feedObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+          });
+        } catch (e) {}
 
         // Check périodique separement pour les bandeaux qui apparaissent
         // en différé (install app) et le marqueur de route sur navigations
