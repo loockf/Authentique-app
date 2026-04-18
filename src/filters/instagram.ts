@@ -510,8 +510,31 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
 
       function scanSuggestions() {
         if (!prefs.hideSuggestions) { return; }
-        // Caching : mêmes raisons que scanSponsored. Les headings sont
-        // stables, une fois checke on ne revient pas dessus.
+
+        // Detection INLINE (depuis nov 2024 env.) : Instagram a change
+        // la structure de ses suggestions. "Suggestions pour vous"
+        // n'est plus un heading <h2>/<h3> au-dessus du post, mais du
+        // texte inline integre dans l'article lui-meme (a cote du
+        // pseudo de l'auteur). On scan l'article entier via
+        // containsText, comme on fait pour les sponsorises.
+        //
+        // Pas de caching par attribut sur cet iterateur : les suggestions
+        // peuvent apparaitre apres le premier rendu (lazy-load) et on
+        // ne veut pas les rater. hideInFlow est idempotent (early
+        // return si deja cache), donc pas de risque de re-traiter.
+        var articlesForSugInline = document.querySelectorAll(
+          'article:not(.authentique-hidden):not(.authentique-hidden-flow), ' +
+          '[role="article"]:not(.authentique-hidden):not(.authentique-hidden-flow)'
+        );
+        for (var a = 0; a < articlesForSugInline.length; a++) {
+          var art = articlesForSugInline[a];
+          if (containsText(art, SUGGESTED_NEEDLES)) {
+            hideInFlow(art, 'suggestion-inline');
+          }
+        }
+
+        // Detection HEADING (ancienne structure, conservee comme filet
+        // de securite si Instagram revient a l'ancien format).
         var headings = document.querySelectorAll(
           'h2:not([' + SCANNED_ATTR + ']), ' +
           'h3:not([' + SCANNED_ATTR + ']), ' +

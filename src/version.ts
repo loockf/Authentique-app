@@ -79,5 +79,14 @@
  *               Philosophie Authentique : on ne gere que ce qu'on
  *               veut pas voir, le scroll reste sous le controle
  *               d'Instagram. Long-press 100ms conserve.
+ *   Alpha 4.10 — fix suggestions inline : Instagram a change en
+ *                nov 2024 et met "Suggestions pour vous" en texte
+ *                inline dans l'article (plus un heading separe).
+ *                scanSuggestions itere maintenant aussi les
+ *                articles et detecte le texte via containsText.
+ *                L'ancien scan de headings reste (filet de
+ *                securite si Instagram reverse le changement).
+ *                Note : les commits story 5.0-5.4 sont archives
+ *                dans la branche claude/story-attempts-backup.
  */
-export const APP_VERSION = 'Alpha 4.9';
+export const APP_VERSION = 'Alpha 4.10';
