@@ -431,13 +431,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           }
         } catch (e) {}
 
-        // Nettoyage DOM agressif : on vide le contenu de l'article.
-        // L'element reste dans le layout (height:0 + opacity:0) pour
-        // que l'IntersectionObserver d'Instagram continue a firer,
-        // mais ses ~200 noeuds enfants sont supprimes. A 200+ articles
-        // caches, ca libere ~40 000 noeuds DOM.
-        try { el.innerHTML = ''; } catch (e) {}
-
         if (isHomeFeedRoute()) {
           hiddenCount++;
           post({ type: 'hidden-count', count: hiddenCount });
@@ -465,7 +458,7 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
           if (art.classList.contains('authentique-hidden')) { continue; }
           try {
             var rect = art.getBoundingClientRect();
-            if (rect.bottom >= -1500) { continue; }
+            if (rect.bottom >= -3000) { continue; }
           } catch (e) { continue; }
           art.setAttribute('data-authentique-media-released', '1');
           try {
@@ -486,7 +479,6 @@ export function buildInstagramFilters(prefs: FilterPreferences): FilterBundle {
               sources[s].removeAttribute('srcset');
             }
           } catch (e) {}
-          try { art.innerHTML = ''; } catch (e) {}
         }
       }
 

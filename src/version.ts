@@ -129,15 +129,13 @@
  *                RAM reste quasi-constante peu importe la longueur
  *                du scroll. Si l'utilisateur remonte, Instagram
  *                re-lazy-load les images.
- *   Alpha 4.16 — nettoyage DOM agressif : hideInFlow vide maintenant
- *                innerHTML de l'article apres avoir detache les medias.
- *                Chaque article Instagram contient ~200 noeuds DOM
- *                (wrappers, spans, SVGs). A 216 articles caches, ca
- *                faisait ~43 000 noeuds inutiles en memoire. La
- *                coquille <article> reste (IntersectionObserver OK)
- *                mais le contenu est supprime. releaseOffscreenMedia
- *                fait pareil pour les posts d'amis hors-ecran (seuil
- *                reduit de 3000px a 1500px). Fix label toggle pubs
- *                (retrait "stories" car pas encore filtre).
+ *   Alpha 4.16 — (REVERT) innerHTML='' causait un cycle infini :
+ *                Instagram re-injectait du contenu dans les articles
+ *                vides, declenchant un re-scan permanent. Resultat :
+ *                lenteur extreme + flash de sponsos/suggestions de
+ *                plusieurs secondes. Revert complet du innerHTML, on
+ *                garde uniquement le detachement des medias (src) qui
+ *                est safe. Seuil offscreen remis a 3000px. Fix label
+ *                toggle pubs conserve.
  */
 export const APP_VERSION = 'Alpha 4.16';
