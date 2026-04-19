@@ -30,7 +30,7 @@ const TOGGLES: Toggle[] = [
   {
     key: 'hideAds',
     label: 'Masquer les publicités',
-    description: 'Posts et bannières sponsorisés dans le fil',
+    description: 'Posts, stories et bannières sponsorisés',
   },
   {
     key: 'hideSuggestions',

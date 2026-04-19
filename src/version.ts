@@ -110,32 +110,5 @@
  *                   reste, les pixels sont relaches. Critique pour
  *                   eviter le crash quand beaucoup d'articles sont
  *                   caches (user a vu un crash a 93 elements masques).
- *   Alpha 4.14 — fix compteur bloque apres reload. bumpHiddenCount
- *                prend Math.max(previous, count), donc apres un
- *                auto-reload (ou un crash WebView), le JS repartait
- *                de 0 et envoyait 1, 2, 3... toujours inferieur a
- *                la derniere valeur pre-reload (ex : 199), et RN
- *                restait fige. Correction : resetHiddenCount() est
- *                appele avant webview.reload() dans le handler
- *                onContentProcessDidTerminate.
- *   Alpha 4.15 — liberation memoire aggressive : toutes les 5s, les
- *                articles (amis inclus) a plus de 3000px au-dessus du
- *                viewport se font retirer leurs medias (video, img,
- *                source). Avant, seuls les articles caches par nos
- *                filtres etaient nettoyes. Mais les posts d'amis
- *                deja scrolles gardaient images+videos en RAM. Avec
- *                ~50 posts amis charges, ca representait assez de
- *                memoire pour qu'iOS tue le process. Maintenant la
- *                RAM reste quasi-constante peu importe la longueur
- *                du scroll. Si l'utilisateur remonte, Instagram
- *                re-lazy-load les images.
- *   Alpha 4.16 — (REVERT) innerHTML='' causait un cycle infini :
- *                Instagram re-injectait du contenu dans les articles
- *                vides, declenchant un re-scan permanent. Resultat :
- *                lenteur extreme + flash de sponsos/suggestions de
- *                plusieurs secondes. Revert complet du innerHTML, on
- *                garde uniquement le detachement des medias (src) qui
- *                est safe. Seuil offscreen remis a 3000px. Fix label
- *                toggle pubs conserve.
  */
-export const APP_VERSION = 'Alpha 4.16';
+export const APP_VERSION = 'Alpha 4.13';
