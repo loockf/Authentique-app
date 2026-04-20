@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { useFilters } from '../context/FiltersContext';
@@ -59,29 +59,18 @@ function buildInstallScript(bundle: FilterBundle): string {
         }
       } catch (e) {}
     })();
-    // Top-level try-catch autour du bundle JS : si bundle.js a une
-    // erreur de parsing ou throws au demarrage, on envoie l'erreur
-    // directement a React Native via postMessage. Critique pour
-    // debugger a distance quand rien ne marche.
-    try {
-      ${bundle.js}
-    } catch (bundleErr) {
-      try {
-        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'bundle-error',
-            message: (bundleErr && bundleErr.message) ? bundleErr.message : String(bundleErr),
-            stack: (bundleErr && bundleErr.stack) ? String(bundleErr.stack).slice(0, 500) : ''
-          }));
-        }
-      } catch (e2) {}
-    }
+    ${bundle.js}
   `;
 }
 
 export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
   const { bumpHiddenCount, prefs } = useFilters();
   const webviewRef = useRef<WebView>(null);
+
+  // Etat "on est sur /explore/" alimente par le script injecte via
+  // un message 'route-explore-changed'. Utilise pour toggler la prop
+  // pullToRefreshEnabled du WebView en dessous.
+  const [isOnExplore, setIsOnExplore] = useState(false);
 
   const installScript = useMemo(() => buildInstallScript(filters), [filters]);
 
@@ -93,26 +82,8 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         const message = JSON.parse(raw) as FilterMessage;
         if (message.type === 'hidden-count') {
           bumpHiddenCount(message.count);
-        } else if (message.type === 'scanner-error') {
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[Authentique filter error]',
-            message.scanner,
-            message.message,
-            message.stack,
-          );
-        } else if (message.type === 'bundle-error') {
-          // eslint-disable-next-line no-console
-          console.warn(
-            '[Authentique BUNDLE error — script failed to parse or crashed]',
-            message.message,
-            message.stack,
-          );
-        } else if (message.type === 'debug') {
-          // Log les diagnostics dans Metro pour voir en live ce que
-          // fait le script injecte.
-          // eslint-disable-next-line no-console
-          console.log('[Authentique debug]', message);
+        } else if (message.type === 'route-explore-changed') {
+          setIsOnExplore(message.isOnExplore);
         }
         // Les messages 'ready' sont ignorés côté RN pour l'instant.
       } catch {
@@ -128,6 +99,16 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
     // de bord s'il tourne déjà.
     webviewRef.current?.injectJavaScript(installScript);
   }, [installScript]);
+
+  // Auto-reload quand iOS tue le process WebView pour manque de memoire.
+  // Avec 60+ articles caches qui gardent leurs medias en memoire, plus
+  // notre JS, iOS peut decider de terminer le process. Sans handler,
+  // on reste sur un ecran blanc permanent. Avec reload, on revient sur
+  // Instagram (en perdant la position de scroll — acceptable vs l'ecran
+  // blanc definitif).
+  const handleContentProcessTerminate = useCallback(() => {
+    webviewRef.current?.reload();
+  }, []);
 
   // Propagation "hot reload" des préférences : à chaque fois que `prefs`
   // change (l'utilisateur toggle un switch dans l'écran Paramètres), on
@@ -158,11 +139,16 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         thirdPartyCookiesEnabled={true}
         cacheEnabled={true}
         incognito={false}
+        // Active Safari Web Inspector sur le WebView (iOS 16.4+).
+        // Necessaire pour debugger le DOM d'Instagram depuis Safari
+        // sur Mac. A desactiver avant un build production.
+        webviewDebuggingEnabled={true}
         // --- Injection ---------------------------------------------------
         injectedJavaScriptBeforeContentLoaded={installScript}
         injectedJavaScript={installScript}
         onLoadStart={handleLoadStart}
         onMessage={handleMessage}
+        onContentProcessDidTerminate={handleContentProcessTerminate}
         // --- UX ----------------------------------------------------------
         // allowsBackForwardNavigationGestures: false parce que notre script
         // injecte (installTabSwipeNav) prend en charge le swipe horizontal
@@ -171,12 +157,14 @@ export function FilteredWebView({ uri, filters }: FilteredWebViewProps) {
         // temps, les deux rentrent en conflit et aucun des deux ne marche
         // correctement.
         allowsBackForwardNavigationGestures={false}
-        // pullToRefreshEnabled: false pour empecher le scroll vers le
-        // haut de declencher un rechargement de la page Instagram. Sans
-        // ca, chaque pull-to-refresh recharge la page, ouvre une breve
-        // fenetre de visibilite non-filtree (nos scanners prennent ~500ms
-        // a se remettre en marche), et le contenu suggere reapparait.
-        pullToRefreshEnabled={false}
+        // Pull-to-refresh natif iOS desactive UNIQUEMENT quand on est
+        // sur /explore/. Le UIRefreshControl du UIScrollView de
+        // WKWebView est totalement retire a la volee, donc aucun
+        // geste de pull ne peut declencher un reload de la page. Sur
+        // les autres routes (home, reels, DMs), il reste actif. La
+        // valeur isOnExplore est alimentee par le script injecte via
+        // le message 'route-explore-changed' dans handleMessage.
+        pullToRefreshEnabled={!isOnExplore}
         // Masque la barre iOS ⬆️⬇️✅ qui apparait au-dessus du clavier
         // quand un input HTML est focus. Elle est utile pour naviguer
         // entre les inputs d'un formulaire classique, mais totalement

@@ -13,6 +13,7 @@ import { useFilters } from '../context/FiltersContext';
 import type { FilterPreferences } from '../filters/types';
 import { resetNavPositionToDefault } from '../components/FloatingNav';
 import { colors } from '../theme/colors';
+import { APP_VERSION } from '../version';
 
 /**
  * Écran Paramètres : toggles des filtres + quelques mots sur la philosophie.
@@ -39,7 +40,7 @@ const TOGGLES: Toggle[] = [
   {
     key: 'hideReels',
     label: 'Masquer les Reels suggérés',
-    description: 'Vidéos courtes de comptes que vous ne suivez pas',
+    description: 'Blocs « Reels et plus » parfois insérés dans le fil d\'actualité',
   },
   {
     key: 'navSnapToEdge',
@@ -120,6 +121,13 @@ export function SettingsScreen() {
             Authentique ne collecte aucune donnée. Pas de compte, pas d'analytics,
             pas de backend. L'app n'est qu'une fenêtre filtrée sur Instagram et
             Facebook, qui te rend le contrôle de ce que tu vois.
+          </Text>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerHeading}>À propos</Text>
+          <Text style={styles.footerBody}>
+            Authentique — Version {APP_VERSION}
           </Text>
         </View>
       </ScrollView>
